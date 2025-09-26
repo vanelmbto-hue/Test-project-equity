@@ -108,6 +108,69 @@ export function getAnalystPageHTML(symbol: string = 'AAPL') {
                 </div>
             </section>
 
+            <!-- Financial Ratios Section -->
+            <section class="bg-white rounded-lg shadow-md p-6 fade-in" id="ratiosSection" style="display: none;">
+                <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                    <svg class="w-6 h-6 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                    Ratios et Indicateurs Clés (5 ans)
+                </h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-6 border border-blue-200">
+                        <div class="flex items-center justify-between mb-2">
+                            <h3 class="text-sm font-semibold text-blue-800 uppercase tracking-wide">Return Total</h3>
+                            <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                            </svg>
+                        </div>
+                        <div class="text-3xl font-bold text-blue-900" id="returnTotal5Y">-</div>
+                        <div class="text-xs text-blue-600 mt-1">Annualisé sur 5 ans</div>
+                    </div>
+                    
+                    <div class="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-6 border border-orange-200">
+                        <div class="flex items-center justify-between mb-2">
+                            <h3 class="text-sm font-semibold text-orange-800 uppercase tracking-wide">Volatilité</h3>
+                            <svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l3-3 3 3v13M9 19h6M9 19l-2-2M15 19l2-2M12 6V3"></path>
+                            </svg>
+                        </div>
+                        <div class="text-3xl font-bold text-orange-900" id="volatility5Y">-</div>
+                        <div class="text-xs text-orange-600 mt-1">Annualisée sur 5 ans</div>
+                    </div>
+                    
+                    <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-6 border border-green-200">
+                        <div class="flex items-center justify-between mb-2">
+                            <h3 class="text-sm font-semibold text-green-800 uppercase tracking-wide">Ratio Sharpe</h3>
+                            <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"></path>
+                            </svg>
+                        </div>
+                        <div class="text-3xl font-bold text-green-900" id="sharpeRatio5Y">-</div>
+                        <div class="text-xs text-green-600 mt-1">Risque ajusté sur 5 ans</div>
+                    </div>
+                </div>
+                
+                <div class="mt-4 bg-gray-50 rounded-lg p-4">
+                    <h4 class="text-sm font-semibold text-gray-700 mb-2">Méthodologie de Calcul</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-gray-600">
+                        <div>
+                            <strong>Return Total:</strong> (Prix_final/Prix_initial)^(1/5) - 1<br>
+                            Rendement annualisé géométrique sur 5 ans
+                        </div>
+                        <div>
+                            <strong>Volatilité:</strong> σ_quotidien × √252<br>
+                            Écart-type des returns quotidiens annualisé
+                        </div>
+                        <div>
+                            <strong>Sharpe:</strong> (Return - Taux_sans_risque) / Volatilité<br>
+                            Rendement excédentaire par unité de risque
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <!-- Price Chart Section -->
             <section class="bg-white rounded-lg shadow-md p-6 fade-in" id="chartSection" style="display: none;">
                 <div class="flex items-center justify-between mb-4">
@@ -252,6 +315,7 @@ export function getAnalystPageHTML(symbol: string = 'AAPL') {
             try {
                 // Show loading state
                 document.getElementById('companySection').style.display = 'block';
+                document.getElementById('ratiosSection').style.display = 'block';
                 document.getElementById('chartSection').style.display = 'block';
                 document.getElementById('dataSection').style.display = 'block';
                 
@@ -266,6 +330,9 @@ export function getAnalystPageHTML(symbol: string = 'AAPL') {
                 
                 // Load maximum historical data for Excel export
                 await loadFullHistoricalData(symbol);
+                
+                // Calculate and display financial ratios
+                await calculateFinancialRatios(symbol);
                 
             } catch (error) {
                 console.error('Error loading company data:', error);
@@ -495,6 +562,113 @@ export function getAnalystPageHTML(symbol: string = 'AAPL') {
             a.download = currentSymbol + '_historical_data.csv';
             a.click();
             window.URL.revokeObjectURL(url);
+        }
+
+        // Calculate financial ratios (5-year metrics)
+        async function calculateFinancialRatios(symbol) {
+            try {
+                // Get 5-year historical data
+                const endDate = new Date().toISOString().split('T')[0];
+                const startDate = new Date();
+                startDate.setFullYear(startDate.getFullYear() - 5);
+                const start5Y = startDate.toISOString().split('T')[0];
+                
+                const response = await axios.get('/api/stock/' + symbol + '/historical?start=' + start5Y + '&end=' + endDate);
+                if (!response.data.success || response.data.data.length < 250) {
+                    displayRatiosError('Données insuffisantes pour le calcul (minimum 1 an requis)');
+                    return;
+                }
+                
+                const data5Y = response.data.data.reverse(); // Oldest first for calculations
+                
+                // Get risk-free rate (simplified: using average 2.5% for demonstration)
+                const riskFreeRate = await getRiskFreeRate();
+                
+                // Calculate metrics
+                const totalReturn5Y = calculateAnnualizedReturn(data5Y);
+                const volatility5Y = calculateAnnualizedVolatility(data5Y);
+                const sharpeRatio5Y = calculateSharpeRatio(totalReturn5Y, riskFreeRate, volatility5Y);
+                
+                // Display results
+                displayFinancialRatios(totalReturn5Y, volatility5Y, sharpeRatio5Y);
+                
+            } catch (error) {
+                console.error('Error calculating financial ratios:', error);
+                displayRatiosError('Erreur lors du calcul des ratios');
+            }
+        }
+        
+        // Calculate annualized return using geometric mean
+        function calculateAnnualizedReturn(data) {
+            if (data.length < 2) return 0;
+            
+            const startPrice = data[0].close;
+            const endPrice = data[data.length - 1].close;
+            const years = data.length / 252; // Approximate trading days per year
+            
+            // Geometric mean: (End/Start)^(1/years) - 1
+            const annualizedReturn = Math.pow(endPrice / startPrice, 1 / years) - 1;
+            return annualizedReturn * 100; // Convert to percentage
+        }
+        
+        // Calculate annualized volatility using daily returns
+        function calculateAnnualizedVolatility(data) {
+            if (data.length < 2) return 0;
+            
+            // Calculate daily returns
+            const returns = [];
+            for (let i = 1; i < data.length; i++) {
+                const dailyReturn = (data[i].close - data[i-1].close) / data[i-1].close;
+                returns.push(dailyReturn);
+            }
+            
+            // Calculate standard deviation of returns
+            const mean = returns.reduce((sum, r) => sum + r, 0) / returns.length;
+            const variance = returns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / (returns.length - 1);
+            const stdDev = Math.sqrt(variance);
+            
+            // Annualize: multiply by sqrt(252) for trading days
+            const annualizedVolatility = stdDev * Math.sqrt(252);
+            return annualizedVolatility * 100; // Convert to percentage
+        }
+        
+        // Calculate Sharpe ratio
+        function calculateSharpeRatio(annualizedReturn, riskFreeRate, annualizedVolatility) {
+            if (annualizedVolatility === 0) return 0;
+            
+            // Sharpe = (Return - RiskFreeRate) / Volatility
+            return (annualizedReturn - riskFreeRate) / annualizedVolatility;
+        }
+        
+        // Get risk-free rate from API
+        async function getRiskFreeRate() {
+            try {
+                const response = await axios.get('/api/risk-free-rate?period=5Y');
+                if (response.data.success) {
+                    return response.data.data.rate;
+                } else {
+                    console.warn('Risk-free rate API failed, using fallback');
+                    return 2.0;
+                }
+            } catch (error) {
+                console.error('Error fetching risk-free rate:', error);
+                return 2.0; // Fallback rate
+            }
+        }
+        
+        // Display financial ratios in the UI
+        function displayFinancialRatios(totalReturn, volatility, sharpe) {
+            document.getElementById('returnTotal5Y').textContent = totalReturn.toFixed(2) + '%';
+            document.getElementById('volatility5Y').textContent = volatility.toFixed(2) + '%';
+            document.getElementById('sharpeRatio5Y').textContent = sharpe.toFixed(3);
+        }
+        
+        // Display error message for ratios
+        function displayRatiosError(message) {
+            document.getElementById('returnTotal5Y').textContent = 'N/A';
+            document.getElementById('volatility5Y').textContent = 'N/A';
+            document.getElementById('sharpeRatio5Y').textContent = 'N/A';
+            console.warn('Financial ratios calculation:', message);
         }
 
         // Export to Excel (using full historical data)

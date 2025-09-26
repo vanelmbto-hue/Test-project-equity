@@ -89,6 +89,44 @@ app.get('/api/stock/:symbol/info', async (c) => {
   }
 })
 
+// API for risk-free rates (French government bonds)
+app.get('/api/risk-free-rate', async (c) => {
+  const period = c.req.query('period') || '5Y'
+  
+  try {
+    // In production, this would fetch from ECB API, Banque de France, or similar
+    // For now, return historical estimates based on French 5Y government bonds
+    
+    const riskFreeRates = {
+      '2025': 2.85,
+      '2024': 2.80,
+      '2023': 2.20,
+      '2022': 1.50,
+      '2021': 0.30,
+      '2020': 0.10,
+      '2019': 0.25,
+      '2018': 0.45,
+      'default': 2.00
+    }
+    
+    const currentYear = new Date().getFullYear().toString()
+    const rate = riskFreeRates[currentYear] || riskFreeRates['default']
+    
+    return c.json({ 
+      success: true, 
+      data: {
+        rate: rate,
+        period: period,
+        source: 'French Government Bonds (OAT 5Y)',
+        date: new Date().toISOString().split('T')[0],
+        note: 'Estimated rates based on French Treasury bonds - production should use ECB API'
+      }
+    })
+  } catch (error) {
+    return c.json({ success: false, error: 'Failed to fetch risk-free rate' }, 500)
+  }
+})
+
 // STOXX Sectors Matrix API
 app.get('/api/matrix/stoxx-sectors', async (c) => {
   // This would be populated with real company data
