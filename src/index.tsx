@@ -117,6 +117,13 @@ function generateSampleHistoricalData(symbol: string, startDate: string, endDate
   const data = []
   const start = new Date(startDate)
   const end = new Date(endDate)
+  
+  // Ensure we don't go too far back for performance
+  const minDate = new Date('1990-01-01')
+  if (start < minDate) {
+    start.setTime(minDate.getTime())
+  }
+  
   let currentPrice = 100 + Math.random() * 500 // Random starting price
   
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {

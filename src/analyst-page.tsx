@@ -10,6 +10,7 @@ export function getAnalystPageHTML(symbol: string = 'AAPL') {
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -127,6 +128,8 @@ export function getAnalystPageHTML(symbol: string = 'AAPL') {
                             <option value="1Y">1 An</option>
                             <option value="2Y">2 Ans</option>
                             <option value="5Y">5 Ans</option>
+                            <option value="10Y">10 Ans</option>
+                            <option value="MAX">Max</option>
                         </select>
                     </div>
                 </div>
@@ -163,6 +166,13 @@ export function getAnalystPageHTML(symbol: string = 'AAPL') {
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                             </svg>
                             Export CSV
+                        </button>
+                        
+                        <button onclick="exportToExcel()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm">
+                            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                            </svg>
+                            Export Excel
                         </button>
                     </div>
                 </div>
@@ -203,6 +213,7 @@ export function getAnalystPageHTML(symbol: string = 'AAPL') {
     <script>
         let currentSymbol = '${symbol.toUpperCase()}';
         let currentData = [];
+        let fullHistoricalData = [];  // Store complete historical data for Excel export
         let currentPage = 1;
         let rowsPerPage = 50;
         let priceChart = null;
@@ -245,13 +256,16 @@ export function getAnalystPageHTML(symbol: string = 'AAPL') {
                 document.getElementById('dataSection').style.display = 'block';
                 
                 // Load company info
-                const infoResponse = await axios.get(\`/api/stock/\${symbol}/info\`);
+                const infoResponse = await axios.get('/api/stock/' + symbol + '/info');
                 if (infoResponse.data.success) {
                     displayCompanyInfo(infoResponse.data.data);
                 }
                 
-                // Load historical data
+                // Load historical data for chart
                 await loadHistoricalData(symbol);
+                
+                // Load maximum historical data for Excel export
+                await loadFullHistoricalData(symbol);
                 
             } catch (error) {
                 console.error('Error loading company data:', error);
@@ -262,29 +276,28 @@ export function getAnalystPageHTML(symbol: string = 'AAPL') {
         // Display company info
         function displayCompanyInfo(company) {
             const infoDiv = document.getElementById('companyInfo');
-            infoDiv.innerHTML = \`
-                <div class="bg-gray-50 rounded-lg p-4">
-                    <h3 class="text-lg font-semibold text-gray-800">\${company.symbol}</h3>
-                    <p class="text-gray-600">\${company.name}</p>
-                </div>
-                <div class="bg-gray-50 rounded-lg p-4">
-                    <p class="text-sm text-gray-600">Secteur</p>
-                    <p class="text-lg font-semibold text-gray-800">\${company.sector}</p>
-                </div>
-                <div class="bg-gray-50 rounded-lg p-4">
-                    <p class="text-sm text-gray-600">Cap. Boursière</p>
-                    <p class="text-lg font-semibold text-gray-800">\${formatMarketCap(company.marketCap)}</p>
-                </div>
-            \`;
+            infoDiv.innerHTML = 
+                '<div class="bg-gray-50 rounded-lg p-4">' +
+                    '<h3 class="text-lg font-semibold text-gray-800">' + company.symbol + '</h3>' +
+                    '<p class="text-gray-600">' + company.name + '</p>' +
+                '</div>' +
+                '<div class="bg-gray-50 rounded-lg p-4">' +
+                    '<p class="text-sm text-gray-600">Secteur</p>' +
+                    '<p class="text-lg font-semibold text-gray-800">' + company.sector + '</p>' +
+                '</div>' +
+                '<div class="bg-gray-50 rounded-lg p-4">' +
+                    '<p class="text-sm text-gray-600">Cap. Boursière</p>' +
+                    '<p class="text-lg font-semibold text-gray-800">' + formatMarketCap(company.marketCap) + '</p>' +
+                '</div>';
         }
 
-        // Load historical data
+        // Load historical data for chart and table
         async function loadHistoricalData(symbol, period = '3M') {
             try {
                 const endDate = new Date().toISOString().split('T')[0];
                 const startDate = getStartDate(period);
                 
-                const response = await axios.get(\`/api/stock/\${symbol}/historical?start=\${startDate}&end=\${endDate}\`);
+                const response = await axios.get('/api/stock/' + symbol + '/historical?start=' + startDate + '&end=' + endDate);
                 if (response.data.success) {
                     currentData = response.data.data;
                     currentPage = 1;
@@ -300,6 +313,21 @@ export function getAnalystPageHTML(symbol: string = 'AAPL') {
             }
         }
 
+        // Load full historical data (MAX period) for Excel export
+        async function loadFullHistoricalData(symbol) {
+            try {
+                const endDate = new Date().toISOString().split('T')[0];
+                const startDate = '1970-01-01'; // Maximum historical data
+                
+                const response = await axios.get('/api/stock/' + symbol + '/historical?start=' + startDate + '&end=' + endDate);
+                if (response.data.success) {
+                    fullHistoricalData = response.data.data;
+                }
+            } catch (error) {
+                console.error('Error loading full historical data:', error);
+            }
+        }
+
         // Get start date based on period
         function getStartDate(period) {
             const now = new Date();
@@ -310,6 +338,8 @@ export function getAnalystPageHTML(symbol: string = 'AAPL') {
                 case '1Y': return new Date(now.setFullYear(now.getFullYear() - 1)).toISOString().split('T')[0];
                 case '2Y': return new Date(now.setFullYear(now.getFullYear() - 2)).toISOString().split('T')[0];
                 case '5Y': return new Date(now.setFullYear(now.getFullYear() - 5)).toISOString().split('T')[0];
+                case '10Y': return new Date(now.setFullYear(now.getFullYear() - 10)).toISOString().split('T')[0];
+                case 'MAX': return '1970-01-01'; // Maximum historical data available
                 default: return new Date(now.setMonth(now.getMonth() - 3)).toISOString().split('T')[0];
             }
         }
@@ -322,7 +352,7 @@ export function getAnalystPageHTML(symbol: string = 'AAPL') {
                 priceChart.destroy();
             }
             
-            const chartData = data.slice(-90); // Last 90 days for chart
+            const chartData = data.slice(-200); // Last 200 days for chart performance
             
             priceChart = new Chart(ctx, {
                 type: 'line',
@@ -369,18 +399,18 @@ export function getAnalystPageHTML(symbol: string = 'AAPL') {
             const endIndex = startIndex + rowsPerPage;
             const pageData = currentData.slice(startIndex, endIndex);
             
-            tbody.innerHTML = pageData.map(row => \`
-                <tr class="hover:bg-gray-50">
-                    <td class="font-medium">\${new Date(row.date).toLocaleDateString('fr-FR')}</td>
-                    <td class="text-right">\${row.open.toFixed(2)}</td>
-                    <td class="text-right">\${row.high.toFixed(2)}</td>
-                    <td class="text-right">\${row.low.toFixed(2)}</td>
-                    <td class="text-right font-medium">\${row.close.toFixed(2)}</td>
-                    <td class="text-right">\${formatVolume(row.volume)}</td>
-                    <td class="text-right \${row.change >= 0 ? 'positive' : 'negative'}">\${row.change > 0 ? '+' : ''}\${row.change.toFixed(2)}</td>
-                    <td class="text-right \${row.changePercent >= 0 ? 'positive' : 'negative'}">\${row.changePercent > 0 ? '+' : ''}\${row.changePercent.toFixed(2)}%</td>
-                </tr>
-            \`).join('');
+            tbody.innerHTML = pageData.map(row => 
+                '<tr class="hover:bg-gray-50">' +
+                    '<td class="font-medium">' + new Date(row.date).toLocaleDateString('fr-FR') + '</td>' +
+                    '<td class="text-right">' + row.open.toFixed(2) + '</td>' +
+                    '<td class="text-right">' + row.high.toFixed(2) + '</td>' +
+                    '<td class="text-right">' + row.low.toFixed(2) + '</td>' +
+                    '<td class="text-right font-medium">' + row.close.toFixed(2) + '</td>' +
+                    '<td class="text-right">' + formatVolume(row.volume) + '</td>' +
+                    '<td class="text-right ' + (row.change >= 0 ? 'positive' : 'negative') + '">' + (row.change > 0 ? '+' : '') + row.change.toFixed(2) + '</td>' +
+                    '<td class="text-right ' + (row.changePercent >= 0 ? 'positive' : 'negative') + '">' + (row.changePercent > 0 ? '+' : '') + row.changePercent.toFixed(2) + '%</td>' +
+                '</tr>'
+            ).join('');
             
             updatePaginationInfo();
             updatePaginationControls();
@@ -391,7 +421,7 @@ export function getAnalystPageHTML(symbol: string = 'AAPL') {
             const startIndex = (currentPage - 1) * rowsPerPage + 1;
             const endIndex = Math.min(currentPage * rowsPerPage, currentData.length);
             document.getElementById('paginationInfo').textContent = 
-                \`Affichage de \${startIndex} à \${endIndex} sur \${currentData.length} entrées\`;
+                'Affichage de ' + startIndex + ' à ' + endIndex + ' sur ' + currentData.length + ' entrées';
         }
 
         // Update pagination controls
@@ -411,7 +441,7 @@ export function getAnalystPageHTML(symbol: string = 'AAPL') {
             const endPage = Math.min(totalPages, startPage + 4);
             
             for (let i = startPage; i <= endPage; i++) {
-                html += \`<button class="pagination-btn \${i === currentPage ? 'active' : ''}" onclick="goToPage(\${i})">\${i}</button>\`;
+                html += '<button class="pagination-btn ' + (i === currentPage ? 'active' : '') + '" onclick="goToPage(' + i + ')">' + i + '</button>';
             }
             
             // Next button
@@ -462,9 +492,67 @@ export function getAnalystPageHTML(symbol: string = 'AAPL') {
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = \`\${currentSymbol}_historical_data.csv\`;
+            a.download = currentSymbol + '_historical_data.csv';
             a.click();
             window.URL.revokeObjectURL(url);
+        }
+
+        // Export to Excel (using full historical data)
+        function exportToExcel() {
+            try {
+                // Use full historical data for Excel export (maximum available data)
+                const dataToExport = fullHistoricalData.length > 0 ? fullHistoricalData : currentData;
+                
+                // Create workbook
+                const wb = XLSX.utils.book_new();
+                
+                // Prepare data for Excel
+                const wsData = [
+                    ['Date', 'Ouverture', 'Plus Haut', 'Plus Bas', 'Clôture', 'Volume', 'Variation', 'Variation %'],
+                    ...dataToExport.map(row => [
+                        row.date,
+                        row.open,
+                        row.high,
+                        row.low,
+                        row.close,
+                        row.volume,
+                        row.change,
+                        row.changePercent + '%'
+                    ])
+                ];
+                
+                // Create worksheet
+                const ws = XLSX.utils.aoa_to_sheet(wsData);
+                
+                // Set column widths
+                ws['!cols'] = [
+                    { wch: 12 }, // Date
+                    { wch: 12 }, // Ouverture
+                    { wch: 12 }, // Plus Haut
+                    { wch: 12 }, // Plus Bas
+                    { wch: 12 }, // Clôture
+                    { wch: 15 }, // Volume
+                    { wch: 12 }, // Variation
+                    { wch: 15 }  // Variation %
+                ];
+                
+                // Add worksheet to workbook
+                XLSX.utils.book_append_sheet(wb, ws, currentSymbol + '_Historical');
+                
+                // Generate filename with current date
+                const today = new Date().toISOString().split('T')[0];
+                const filename = currentSymbol + '_historical_data_' + today + '.xlsx';
+                
+                // Save file
+                XLSX.writeFile(wb, filename);
+                
+                // Show success message
+                console.log('Excel export successful: ' + dataToExport.length + ' records exported');
+                
+            } catch (error) {
+                console.error('Error exporting to Excel:', error);
+                alert('Erreur lors de l\\'export Excel. Veuillez réessayer.');
+            }
         }
 
         // Utility functions
