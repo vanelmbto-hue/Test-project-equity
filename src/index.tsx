@@ -150,7 +150,7 @@ app.get('/api/matrix/stoxx-sectors', async (c) => {
   return c.json({ success: true, data: matrix })
 })
 
-// Helper function to generate sample historical data
+// Helper function to generate sample historical data with realistic prices
 function generateSampleHistoricalData(symbol: string, startDate: string, endDate: string) {
   const data = []
   const start = new Date(startDate)
@@ -162,17 +162,62 @@ function generateSampleHistoricalData(symbol: string, startDate: string, endDate
     start.setTime(minDate.getTime())
   }
   
-  let currentPrice = 100 + Math.random() * 500 // Random starting price
+  // Realistic current prices for major stocks (based on Yahoo Finance)
+  const realisticPrices: Record<string, number> = {
+    'AAPL': 226.47,    // Apple
+    'MSFT': 415.26,    // Microsoft
+    'GOOGL': 167.06,   // Google
+    'TSLA': 248.50,    // Tesla
+    'NVDA': 136.93,    // Nvidia
+    'AMZN': 185.92,    // Amazon
+    'META': 563.33,    // Meta
+    'NFLX': 711.33,    // Netflix
+    'CAP.PA': 118.80,  // Capgemini (Paris)
+    'CAPGEMINI': 118.80, // Capgemini alternative
+    'MC.PA': 717.60,   // LVMH
+    'SAP': 234.50,     // SAP
+    'ASML': 695.20,    // ASML
+    'TTE': 64.12,      // TotalEnergies
+    'OR.PA': 394.60,   // L'Oréal
+    'SAN.PA': 102.45,  // Sanofi
+    'AIR.PA': 154.78,  // Airbus
+    'BNP.PA': 71.36,   // BNP Paribas
+    'UG.PA': 41.55,    // Peugeot
+    'KER.PA': 315.70   // Kering
+  }
   
+  // Get current price for the symbol, default to reasonable range if not found
+  const currentPrice = realisticPrices[symbol.toUpperCase()] || (50 + Math.random() * 200)
+  
+  // Calculate how many trading days between start and end
+  const totalDays = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+  const tradingDays = Math.floor(totalDays * 0.7) // Approx 70% are trading days
+  
+  // Generate historical path backwards from current price
+  let price = currentPrice
+  const prices: number[] = []
+  
+  // Generate prices working backwards (to get realistic evolution towards current price)
+  for (let i = 0; i < tradingDays; i++) {
+    prices.unshift(price)
+    // Apply daily variation (smaller for more mature stocks)
+    const volatility = price > 200 ? 0.025 : 0.035 // Lower volatility for higher-priced stocks
+    const dailyChange = (Math.random() - 0.5) * volatility
+    price = price / (1 + dailyChange) // Work backwards
+  }
+  
+  // Now generate the actual data points chronologically
+  let priceIndex = 0
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    if (d.getDay() !== 0 && d.getDay() !== 6) { // Skip weekends
-      const dailyChange = (Math.random() - 0.5) * 0.05 // ±2.5% daily change
-      const open = currentPrice
-      const change = open * dailyChange
-      const close = open + change
-      const high = Math.max(open, close) * (1 + Math.random() * 0.02)
-      const low = Math.min(open, close) * (1 - Math.random() * 0.02)
-      const volume = Math.floor(Math.random() * 10000000) + 1000000
+    if (d.getDay() !== 0 && d.getDay() !== 6 && priceIndex < prices.length) { // Skip weekends
+      const open = priceIndex > 0 ? prices[priceIndex - 1] : prices[priceIndex]
+      const close = prices[priceIndex]
+      const dailyChange = close - open
+      const changePercent = open > 0 ? (dailyChange / open) * 100 : 0
+      
+      const high = Math.max(open, close) * (1 + Math.random() * 0.015)
+      const low = Math.min(open, close) * (1 - Math.random() * 0.015)
+      const volume = Math.floor(Math.random() * 5000000) + 500000
       
       data.push({
         date: d.toISOString().split('T')[0],
@@ -181,15 +226,16 @@ function generateSampleHistoricalData(symbol: string, startDate: string, endDate
         low: parseFloat(low.toFixed(2)),
         close: parseFloat(close.toFixed(2)),
         volume: volume,
-        change: parseFloat(change.toFixed(2)),
-        changePercent: parseFloat((dailyChange * 100).toFixed(2))
+        change: parseFloat(dailyChange.toFixed(2)),
+        changePercent: parseFloat(changePercent.toFixed(2))
       })
       
-      currentPrice = close
+      priceIndex++
     }
   }
   
-  return data.reverse() // Most recent first
+  // Return data in chronological order (oldest first, recent last) - FIXED CHRONOLOGICAL ORDER
+  return data
 }
 
 // Analyst page route
