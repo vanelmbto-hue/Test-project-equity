@@ -42,50 +42,69 @@ app.get('/api/markets/overview', async (c) => {
   return c.json({ success: true, data: markets })
 })
 
-// API for stock historical data
+// API for stock historical data - Real Yahoo Finance Integration
 app.get('/api/stock/:symbol/historical', async (c) => {
   const symbol = c.req.param('symbol')
-  const startDate = c.req.query('start') || '2023-01-01'
-  const endDate = c.req.query('end') || new Date().toISOString().split('T')[0]
+  const period = c.req.query('period') || '1Y' // 1M, 3M, 6M, 1Y, 5Y, 10Y, MAX
   
   try {
-    // In production, this would call Yahoo Finance or Investing.com API
-    // For now, return sample data
-    const sampleData = generateSampleHistoricalData(symbol, startDate, endDate)
+    // Get real historical data from Yahoo Finance
+    const historicalData = await fetchYahooHistoricalData(symbol, period)
+    
+    if (!historicalData || historicalData.length === 0) {
+      return c.json({ 
+        success: false, 
+        error: `No data found for symbol ${symbol.toUpperCase()}. Please verify the symbol is correct.`,
+        symbol: symbol.toUpperCase()
+      }, 404)
+    }
     
     return c.json({ 
       success: true, 
       symbol: symbol.toUpperCase(),
-      startDate,
-      endDate,
-      data: sampleData,
-      count: sampleData.length
+      period,
+      data: historicalData,
+      count: historicalData.length,
+      source: 'Yahoo Finance'
     })
   } catch (error) {
-    return c.json({ success: false, error: 'Failed to fetch historical data' }, 500)
+    console.error('Error fetching historical data:', error)
+    return c.json({ 
+      success: false, 
+      error: `Failed to fetch data for ${symbol.toUpperCase()}. ${error instanceof Error ? error.message : 'Unknown error'}`,
+      symbol: symbol.toUpperCase()
+    }, 500)
   }
 })
 
-// API for company info
+// API for company info - Real Yahoo Finance Integration
 app.get('/api/stock/:symbol/info', async (c) => {
   const symbol = c.req.param('symbol')
   
   try {
-    // Sample company info - in production would fetch from API
-    const companyInfo = {
-      symbol: symbol.toUpperCase(),
-      name: `${symbol.toUpperCase()} Corporation`,
-      sector: 'Technology',
-      country: 'US',
-      currency: 'USD',
-      marketCap: 2500000000000,
-      employees: 150000,
-      description: `${symbol.toUpperCase()} is a leading technology company.`
+    // Get real company info from Yahoo Finance
+    const companyInfo = await fetchYahooCompanyInfo(symbol)
+    
+    if (!companyInfo) {
+      return c.json({ 
+        success: false, 
+        error: `Company information not found for ${symbol.toUpperCase()}`,
+        symbol: symbol.toUpperCase()
+      }, 404)
     }
     
-    return c.json({ success: true, data: companyInfo })
+    return c.json({ 
+      success: true, 
+      data: companyInfo,
+      source: 'Yahoo Finance'
+    })
   } catch (error) {
-    return c.json({ success: false, error: 'Failed to fetch company info' }, 500)
+    console.error('Error fetching company info:', error)
+    return c.json({ 
+      success: false, 
+      error: `Failed to fetch company info for ${symbol.toUpperCase()}`,
+      symbol: symbol.toUpperCase()
+    }, 500)
   }
 })
 
@@ -150,97 +169,171 @@ app.get('/api/matrix/stoxx-sectors', async (c) => {
   return c.json({ success: true, data: matrix })
 })
 
-// Helper function to generate sample historical data with realistic prices
-function generateSampleHistoricalData(symbol: string, startDate: string, endDate: string) {
-  const data = []
-  const start = new Date(startDate)
-  const end = new Date(endDate)
-  
-  // Ensure we don't go too far back for performance
-  const minDate = new Date('1990-01-01')
-  if (start < minDate) {
-    start.setTime(minDate.getTime())
+// Real Yahoo Finance API Integration
+
+// Helper function to convert period to Yahoo Finance range parameter
+function periodToYahooRange(period: string): string {
+  const periodMap: Record<string, string> = {
+    '1M': '1mo',
+    '3M': '3mo', 
+    '6M': '6mo',
+    '1Y': '1y',
+    '5Y': '5y',
+    '10Y': '10y',
+    'MAX': 'max'
   }
-  
-  // Realistic current prices for major stocks (based on Yahoo Finance)
-  const realisticPrices: Record<string, number> = {
-    'AAPL': 226.47,    // Apple
-    'MSFT': 415.26,    // Microsoft
-    'GOOGL': 167.06,   // Google
-    'TSLA': 248.50,    // Tesla
-    'NVDA': 136.93,    // Nvidia
-    'AMZN': 185.92,    // Amazon
-    'META': 563.33,    // Meta
-    'NFLX': 711.33,    // Netflix
-    'CAP.PA': 118.80,  // Capgemini (Paris)
-    'CAPGEMINI': 118.80, // Capgemini alternative
-    'MC.PA': 717.60,   // LVMH
-    'SAP': 234.50,     // SAP
-    'ASML': 695.20,    // ASML
-    'TTE': 64.12,      // TotalEnergies
-    'OR.PA': 394.60,   // L'Oréal
-    'SAN.PA': 102.45,  // Sanofi
-    'AIR.PA': 154.78,  // Airbus
-    'BNP.PA': 71.36,   // BNP Paribas
-    'UG.PA': 41.55,    // Peugeot
-    'KER.PA': 315.70   // Kering
-  }
-  
-  // Get current price for the symbol, default to reasonable range if not found
-  const currentPrice = realisticPrices[symbol.toUpperCase()] || (50 + Math.random() * 200)
-  
-  // Calculate how many trading days between start and end
-  const totalDays = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
-  const tradingDays = Math.floor(totalDays * 0.7) // Approx 70% are trading days
-  
-  // Generate historical path backwards from current price
-  let price = currentPrice
-  const prices: number[] = []
-  
-  // Generate prices working backwards (to get realistic evolution towards current price)
-  for (let i = 0; i < tradingDays; i++) {
-    prices.unshift(price)
-    // Apply daily variation (smaller for more mature stocks)
-    const volatility = price > 200 ? 0.025 : 0.035 // Lower volatility for higher-priced stocks
-    const dailyChange = (Math.random() - 0.5) * volatility
-    price = price / (1 + dailyChange) // Work backwards
-  }
-  
-  // Now generate the actual data points chronologically
-  let priceIndex = 0
-  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    if (d.getDay() !== 0 && d.getDay() !== 6 && priceIndex < prices.length) { // Skip weekends
-      const open = priceIndex > 0 ? prices[priceIndex - 1] : prices[priceIndex]
-      const close = prices[priceIndex]
-      const dailyChange = close - open
-      const changePercent = open > 0 ? (dailyChange / open) * 100 : 0
-      
-      const high = Math.max(open, close) * (1 + Math.random() * 0.015)
-      const low = Math.min(open, close) * (1 - Math.random() * 0.015)
-      const volume = Math.floor(Math.random() * 5000000) + 500000
-      
-      data.push({
-        date: d.toISOString().split('T')[0],
-        open: parseFloat(open.toFixed(2)),
-        high: parseFloat(high.toFixed(2)),
-        low: parseFloat(low.toFixed(2)),
-        close: parseFloat(close.toFixed(2)),
-        volume: volume,
-        change: parseFloat(dailyChange.toFixed(2)),
-        changePercent: parseFloat(changePercent.toFixed(2))
-      })
-      
-      priceIndex++
-    }
-  }
-  
-  // Return data in chronological order (oldest first, recent last) - FIXED CHRONOLOGICAL ORDER
-  return data
+  return periodMap[period] || '1y'
 }
 
-// Analyst page route
+// Fetch real historical data from Yahoo Finance
+async function fetchYahooHistoricalData(symbol: string, period: string) {
+  try {
+    // Normalize symbol (handle both CAP.PA and CAPGEMINI formats)
+    const normalizedSymbol = normalizeSymbol(symbol)
+    const range = periodToYahooRange(period)
+    
+    // Yahoo Finance Chart API endpoint
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${normalizedSymbol}?range=${range}&interval=1d&indicators=quote&includeTimestamps=true`
+    
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Referer': 'https://finance.yahoo.com/',
+        'Accept-Language': 'en-US,en;q=0.9'
+      }
+    })
+    
+    if (!response.ok) {
+      throw new Error(`Yahoo Finance API error: ${response.status} ${response.statusText}`)
+    }
+    
+    const data = await response.json()
+    
+    if (!data.chart || !data.chart.result || data.chart.result.length === 0) {
+      throw new Error(`No data found for symbol ${normalizedSymbol}`)
+    }
+    
+    const result = data.chart.result[0]
+    const timestamps = result.timestamp
+    const quotes = result.indicators.quote[0]
+    
+    if (!timestamps || !quotes) {
+      throw new Error('Invalid data structure from Yahoo Finance')
+    }
+    
+    // Convert to our format
+    const historicalData = []
+    
+    for (let i = 0; i < timestamps.length; i++) {
+      const timestamp = timestamps[i]
+      const date = new Date(timestamp * 1000)
+      
+      // Skip if any required data is null
+      if (quotes.open[i] == null || quotes.high[i] == null || 
+          quotes.low[i] == null || quotes.close[i] == null) {
+        continue
+      }
+      
+      const open = parseFloat(quotes.open[i].toFixed(2))
+      const high = parseFloat(quotes.high[i].toFixed(2))
+      const low = parseFloat(quotes.low[i].toFixed(2))
+      const close = parseFloat(quotes.close[i].toFixed(2))
+      const volume = quotes.volume[i] || 0
+      
+      const change = parseFloat((close - open).toFixed(2))
+      const changePercent = open > 0 ? parseFloat(((change / open) * 100).toFixed(2)) : 0
+      
+      historicalData.push({
+        date: date.toISOString().split('T')[0],
+        open,
+        high, 
+        low,
+        close,
+        volume,
+        change,
+        changePercent
+      })
+    }
+    
+    return historicalData
+  } catch (error) {
+    console.error(`Error fetching Yahoo Finance data for ${symbol}:`, error)
+    throw error
+  }
+}
+
+// Fetch real company info from Yahoo Finance
+async function fetchYahooCompanyInfo(symbol: string) {
+  try {
+    const normalizedSymbol = normalizeSymbol(symbol)
+    
+    // Yahoo Finance Quote Summary API
+    const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${normalizedSymbol}?modules=assetProfile,summaryProfile,price`
+    
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*', 
+        'Referer': 'https://finance.yahoo.com/',
+        'Accept-Language': 'en-US,en;q=0.9'
+      }
+    })
+    
+    if (!response.ok) {
+      throw new Error(`Yahoo Finance API error: ${response.status}`)
+    }
+    
+    const data = await response.json()
+    
+    if (!data.quoteSummary || !data.quoteSummary.result || data.quoteSummary.result.length === 0) {
+      throw new Error(`No company info found for ${normalizedSymbol}`)
+    }
+    
+    const result = data.quoteSummary.result[0]
+    const assetProfile = result.assetProfile || {}
+    const price = result.price || {}
+    
+    return {
+      symbol: normalizedSymbol,
+      name: price.longName || price.shortName || normalizedSymbol,
+      sector: assetProfile.sector || 'Unknown',
+      industry: assetProfile.industry || 'Unknown',
+      country: assetProfile.country || 'Unknown',
+      currency: price.currency || 'USD',
+      marketCap: price.marketCap?.raw || null,
+      employees: assetProfile.fullTimeEmployees || null,
+      website: assetProfile.website || null,
+      description: assetProfile.longBusinessSummary || `${price.longName || normalizedSymbol} company information.`
+    }
+  } catch (error) {
+    console.error(`Error fetching company info for ${symbol}:`, error)
+    throw error
+  }
+}
+
+// Helper function to normalize symbol names
+function normalizeSymbol(symbol: string): string {
+  // Convert common alternative names to Yahoo Finance symbols
+  const symbolMap: Record<string, string> = {
+    'CAPGEMINI': 'CAP.PA',  // Capgemini on Euronext Paris
+    'LVMH': 'MC.PA',       // LVMH on Euronext Paris
+    'LOREAL': 'OR.PA',     // L'Oréal on Euronext Paris
+    'SANOFI': 'SAN.PA',    // Sanofi on Euronext Paris
+    'AIRBUS': 'AIR.PA',    // Airbus on Euronext Paris
+    'BNP': 'BNP.PA',       // BNP Paribas on Euronext Paris
+    'PEUGEOT': 'UG.PA',    // Peugeot on Euronext Paris
+    'KERING': 'KER.PA',    // Kering on Euronext Paris
+    'TOTALENERGIES': 'TTE' // TotalEnergies
+  }
+  
+  const upperSymbol = symbol.toUpperCase()
+  return symbolMap[upperSymbol] || symbol.toUpperCase()
+}
+
+// Analyst page route  
 app.get('/analyst', (c) => {
-  const symbol = c.req.query('symbol') || 'AAPL'
+  const symbol = c.req.query('symbol') || 'CAP.PA'  // Default to Capgemini
   return c.html(getAnalystPageHTML(symbol))
 })
 

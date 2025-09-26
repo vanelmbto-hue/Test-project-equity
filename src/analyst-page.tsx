@@ -197,6 +197,12 @@ export function getAnalystPageHTML(symbol: string = 'AAPL') {
                     </div>
                 </div>
                 
+                <!-- Loading Message -->
+                <div id="loadingMessage" class="text-center text-blue-600 py-4" style="display: none;">
+                    <div class="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-2"></div>
+                    Chargement des données Yahoo Finance...
+                </div>
+                
                 <div class="h-96">
                     <canvas id="priceChart"></canvas>
                 </div>
@@ -358,13 +364,14 @@ export function getAnalystPageHTML(symbol: string = 'AAPL') {
                 '</div>';
         }
 
-        // Load historical data for chart and table
+        // Load historical data for chart and table - Real Yahoo Finance API
         async function loadHistoricalData(symbol, period = '3M') {
             try {
-                const endDate = new Date().toISOString().split('T')[0];
-                const startDate = getStartDate(period);
+                document.getElementById('loadingMessage').textContent = 'Chargement des données Yahoo Finance...';
+                document.getElementById('loadingMessage').style.display = 'block';
                 
-                const response = await axios.get('/api/stock/' + symbol + '/historical?start=' + startDate + '&end=' + endDate);
+                const response = await axios.get('/api/stock/' + symbol + '/historical?period=' + period);
+                
                 if (response.data.success) {
                     currentData = response.data.data;
                     currentPage = 1;
@@ -374,24 +381,36 @@ export function getAnalystPageHTML(symbol: string = 'AAPL') {
                     
                     // Update table
                     updateDataTable();
+                    
+                    document.getElementById('loadingMessage').style.display = 'none';
+                    
+                    // Show data source
+                    console.log('Data loaded from:', response.data.source);
+                } else {
+                    throw new Error(response.data.error || 'Failed to load data');
                 }
             } catch (error) {
                 console.error('Error loading historical data:', error);
+                document.getElementById('loadingMessage').textContent = 'Erreur: ' + (error.response?.data?.error || error.message);
+                document.getElementById('loadingMessage').style.color = '#EF4444';
             }
         }
 
-        // Load full historical data (MAX period) for Excel export
+        // Load full historical data (MAX period) for Excel export - Real Yahoo Finance API
         async function loadFullHistoricalData(symbol) {
             try {
-                const endDate = new Date().toISOString().split('T')[0];
-                const startDate = '1970-01-01'; // Maximum historical data
-                
-                const response = await axios.get('/api/stock/' + symbol + '/historical?start=' + startDate + '&end=' + endDate);
+                const response = await axios.get('/api/stock/' + symbol + '/historical?period=MAX');
                 if (response.data.success) {
                     fullHistoricalData = response.data.data;
+                } else {
+                    console.warn('Could not load full historical data:', response.data.error);
+                    // Fallback to current data for export
+                    fullHistoricalData = currentData || [];
                 }
             } catch (error) {
                 console.error('Error loading full historical data:', error);
+                // Fallback to current data for export
+                fullHistoricalData = currentData || [];
             }
         }
 
@@ -567,19 +586,20 @@ export function getAnalystPageHTML(symbol: string = 'AAPL') {
         // Calculate financial ratios (5-year metrics)
         async function calculateFinancialRatios(symbol) {
             try {
-                // Get 5-year historical data
-                const endDate = new Date().toISOString().split('T')[0];
-                const startDate = new Date();
-                startDate.setFullYear(startDate.getFullYear() - 5);
-                const start5Y = startDate.toISOString().split('T')[0];
-                
-                const response = await axios.get('/api/stock/' + symbol + '/historical?start=' + start5Y + '&end=' + endDate);
-                if (!response.data.success || response.data.data.length < 250) {
-                    displayRatiosError('Données insuffisantes pour le calcul (minimum 1 an requis)');
+                // Get 5-year historical data for financial ratios
+                const response = await axios.get('/api/stock/' + symbol + '/historical?period=5Y');
+                if (!response.data.success) {
+                    displayRatiosError('Erreur lors de la récupération des données: ' + response.data.error);
                     return;
                 }
                 
-                const data5Y = response.data.data.reverse(); // Oldest first for calculations
+                const data5Y = response.data.data;
+                if (!data5Y || data5Y.length < 250) {
+                    displayRatiosError('Données insuffisantes pour le calcul des ratios 5 ans (minimum ~1 an requis)');
+                    return;
+                }
+                
+                // Data is already in chronological order (oldest first) from Yahoo Finance
                 
                 // Get risk-free rate (simplified: using average 2.5% for demonstration)
                 const riskFreeRate = await getRiskFreeRate();
