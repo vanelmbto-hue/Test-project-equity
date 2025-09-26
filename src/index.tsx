@@ -4,402 +4,434 @@ import { serveStatic } from 'hono/cloudflare-workers'
 
 const app = new Hono()
 
-// Enable CORS for frontend-backend communication
+// Enable CORS
 app.use('/api/*', cors())
 
-// Serve static files from public directory
+// Serve static files
 app.use('/static/*', serveStatic({ root: './public' }))
 
-// Helper function to fetch stock data from Yahoo Finance
-async function fetchYahooFinanceData(symbol: string, period: string = '1y'): Promise<any> {
-  try {
-    // Yahoo Finance API endpoint (using their historical data endpoint)
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=0&period2=9999999999&interval=1d&includePrePost=true&events=div%2Csplit`
-    
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      }
-    })
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-
-    const data = await response.json()
-    
-    if (!data.chart || !data.chart.result || data.chart.result.length === 0) {
-      throw new Error('No data found for this symbol')
-    }
-
-    const result = data.chart.result[0]
-    const timestamps = result.timestamp
-    const quotes = result.indicators.quote[0]
-    
-    // Convert to array of daily prices
-    const historicalData = timestamps.map((timestamp: number, index: number) => ({
-      date: new Date(timestamp * 1000).toISOString().split('T')[0],
-      open: quotes.open[index]?.toFixed(2) || 'N/A',
-      high: quotes.high[index]?.toFixed(2) || 'N/A',
-      low: quotes.low[index]?.toFixed(2) || 'N/A',
-      close: quotes.close[index]?.toFixed(2) || 'N/A',
-      volume: quotes.volume[index] || 'N/A'
-    })).filter(item => item.close !== 'N/A').reverse() // Most recent first
-
-    return {
-      symbol: result.meta.symbol,
-      companyName: result.meta.symbol, // Yahoo doesn't always provide company name
-      currency: result.meta.currency,
-      exchangeName: result.meta.exchangeName,
-      data: historicalData
-    }
-  } catch (error) {
-    console.error('Error fetching Yahoo Finance data:', error)
-    throw error
-  }
-}
-
-// Helper function to search for company symbols
-async function searchCompanySymbol(query: string): Promise<any> {
-  try {
-    // Yahoo Finance search API
-    const url = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&newsCount=0&listsCount=0`
-    
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      }
-    })
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-
-    const data = await response.json()
-    
-    return data.quotes?.map((quote: any) => ({
-      symbol: quote.symbol,
-      shortname: quote.shortname || quote.longname || quote.symbol,
-      longname: quote.longname || quote.shortname || quote.symbol,
-      exchDisp: quote.exchDisp || 'Unknown',
-      typeDisp: quote.typeDisp || 'Stock'
-    })) || []
-  } catch (error) {
-    console.error('Error searching symbols:', error)
-    return []
-  }
-}
-
 // API Routes
-
-// Search for company symbols
-app.get('/api/search/:query', async (c) => {
-  try {
-    const query = c.req.param('query')
-    
-    if (!query || query.length < 2) {
-      return c.json({ error: 'Query must be at least 2 characters long' }, 400)
-    }
-
-    const results = await searchCompanySymbol(query)
-    
-    return c.json({
-      success: true,
-      query,
-      results: results.slice(0, 10) // Limit to 10 results
-    })
-  } catch (error) {
-    return c.json({ 
-      error: 'Failed to search companies', 
-      details: error instanceof Error ? error.message : 'Unknown error' 
-    }, 500)
-  }
-})
-
-// Get historical stock data
-app.get('/api/stock/:symbol', async (c) => {
-  try {
-    const symbol = c.req.param('symbol').toUpperCase()
-    
-    if (!symbol) {
-      return c.json({ error: 'Symbol parameter is required' }, 400)
-    }
-
-    const stockData = await fetchYahooFinanceData(symbol)
-    
-    return c.json({
-      success: true,
-      symbol,
-      totalDays: stockData.data.length,
-      ...stockData
-    })
-  } catch (error) {
-    return c.json({ 
-      error: 'Failed to fetch stock data', 
-      details: error instanceof Error ? error.message : 'Unknown error' 
-    }, 500)
-  }
-})
-
-// Get stock data with date range
-app.get('/api/stock/:symbol/range', async (c) => {
-  try {
-    const symbol = c.req.param('symbol').toUpperCase()
-    const startDate = c.req.query('start')
-    const endDate = c.req.query('end')
-    
-    if (!symbol) {
-      return c.json({ error: 'Symbol parameter is required' }, 400)
-    }
-
-    const stockData = await fetchYahooFinanceData(symbol)
-    
-    let filteredData = stockData.data
-    
-    if (startDate) {
-      filteredData = filteredData.filter((item: any) => item.date >= startDate)
-    }
-    
-    if (endDate) {
-      filteredData = filteredData.filter((item: any) => item.date <= endDate)
-    }
-    
-    return c.json({
-      success: true,
-      symbol,
-      startDate,
-      endDate,
-      totalDays: filteredData.length,
-      ...stockData,
-      data: filteredData
-    })
-  } catch (error) {
-    return c.json({ 
-      error: 'Failed to fetch stock data', 
-      details: error instanceof Error ? error.message : 'Unknown error' 
-    }, 500)
-  }
-})
-
-// API status endpoint
 app.get('/api/status', (c) => {
   return c.json({
     success: true,
     message: 'Financial Data API is running',
     endpoints: {
-      search: '/api/search/:query',
-      stock: '/api/stock/:symbol',
-      stockRange: '/api/stock/:symbol/range?start=YYYY-MM-DD&end=YYYY-MM-DD'
+      markets: '/api/markets/overview',
+      matrix: '/api/matrix/stoxx-sectors'
     },
-    version: '1.0.0'
+    version: '2.0.0'
   })
 })
 
-// Main page
+// Markets overview API
+app.get('/api/markets/overview', async (c) => {
+  // Simulated market data - in production this would fetch real data
+  const markets = [
+    { index: 'S&P 500', symbol: '^GSPC', value: 5498.42, change: 1.2, country: 'US' },
+    { index: 'Dow Jones', symbol: '^DJI', value: 42250.75, change: 0.8, country: 'US' },
+    { index: 'NASDAQ', symbol: '^IXIC', value: 17254.82, change: 1.5, country: 'US' },
+    { index: 'DAX', symbol: '^GDAXI', value: 19425.60, change: 0.6, country: 'DE' },
+    { index: 'CAC 40', symbol: '^FCHI', value: 7625.75, change: 0.3, country: 'FR' },
+    { index: 'FTSE 100', symbol: '^FTSE', value: 8285.52, change: -0.2, country: 'GB' },
+    { index: 'Nikkei 225', symbol: '^N225', value: 38925.63, change: 1.8, country: 'JP' },
+    { index: 'Hang Seng', symbol: '^HSI', value: 17985.20, change: -0.5, country: 'HK' },
+    { index: 'Shanghai', symbol: '^SSEC', value: 2895.42, change: -0.8, country: 'CN' },
+  ]
+  
+  return c.json({ success: true, data: markets })
+})
+
+// STOXX Sectors Matrix API
+app.get('/api/matrix/stoxx-sectors', async (c) => {
+  // This would be populated with real company data
+  const matrix = {
+    sectors: [
+      'Technology',
+      'Health Care',
+      'Financials',
+      'Industrials',
+      'Consumer Goods',
+      'Consumer Services',
+      'Utilities',
+      'Telecommunications',
+      'Basic Materials',
+      'Energy'
+    ],
+    countries: ['FR', 'DE', 'GB', 'IT', 'ES', 'NL', 'CH', 'SE', 'BE', 'DK'],
+    data: {} // Will be populated with company classifications
+  }
+  
+  return c.json({ success: true, data: matrix })
+})
+
+// Main HTML page
 app.get('/', (c) => {
   return c.html(`
-    <!DOCTYPE html>
-    <html lang="fr">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Plateforme de Prix d'Actions</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-        <link href="/static/style.css" rel="stylesheet">
-    </head>
-    <body class="bg-gray-100">
-        <div class="min-h-screen">
-            <!-- Header -->
-            <header class="bg-white shadow-lg border-b border-gray-200">
-                <div class="max-w-7xl mx-auto px-4 py-6">
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center space-x-3">
-                            <i class="fas fa-chart-line text-3xl text-blue-600"></i>
-                            <h1 class="text-3xl font-bold text-gray-800">Plateforme de Prix d'Actions</h1>
-                        </div>
-                        <div class="text-sm text-gray-500">
-                            <i class="fas fa-database mr-1"></i>
-                            Données historiques en temps réel
-                        </div>
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Marchés Financiers</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .matrix-cell {
+            min-height: 80px;
+            max-height: 150px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+        }
+        .matrix-cell::-webkit-scrollbar {
+            width: 4px;
+        }
+        .matrix-cell::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        .matrix-cell::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+        .flag-icon {
+            width: 20px;
+            height: 15px;
+            display: inline-block;
+            margin-right: 4px;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="min-h-screen">
+        <!-- Header -->
+        <header class="bg-white shadow-sm border-b">
+            <div class="max-w-7xl mx-auto px-4 py-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                        </svg>
+                        <h1 class="text-2xl font-bold text-gray-800">Dashboard Marchés Financiers</h1>
+                    </div>
+                    <div class="text-sm text-gray-500">
+                        <span id="lastUpdate"></span>
                     </div>
                 </div>
-            </header>
+            </div>
+        </header>
 
-            <!-- Main Content -->
-            <main class="max-w-7xl mx-auto px-4 py-8">
-                <!-- Search Section -->
-                <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
-                    <div class="flex items-center mb-4">
-                        <i class="fas fa-search text-xl text-blue-600 mr-3"></i>
-                        <h2 class="text-xl font-semibold text-gray-800">Rechercher une entreprise</h2>
-                    </div>
-                    
-                    <div class="flex space-x-4">
-                        <div class="flex-1 relative">
-                            <input 
-                                type="text" 
-                                id="searchInput" 
-                                placeholder="Entrez le nom ou symbole de l'entreprise (ex: NVDA, Apple, Microsoft...)"
-                                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            >
-                            <div id="searchSuggestions" class="absolute z-10 w-full bg-white border border-gray-300 rounded-lg mt-1 hidden shadow-lg max-h-60 overflow-y-auto">
-                            </div>
-                        </div>
-                        <button 
-                            id="searchBtn" 
-                            class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
-                        >
-                            <i class="fas fa-search mr-2"></i>
-                            Rechercher
-                        </button>
-                    </div>
-
-                    <!-- Date Range Filter -->
-                    <div class="mt-4 flex space-x-4 items-center">
-                        <label class="text-sm font-medium text-gray-700">Filtrer par période :</label>
-                        <input 
-                            type="date" 
-                            id="startDate" 
-                            class="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                        >
-                        <span class="text-gray-500">à</span>
-                        <input 
-                            type="date" 
-                            id="endDate" 
-                            class="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                        >
-                        <button 
-                            id="filterBtn" 
-                            class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-                        >
-                            <i class="fas fa-filter mr-1"></i>
-                            Filtrer
-                        </button>
+        <div class="max-w-7xl mx-auto px-4 py-6 space-y-6">
+            <!-- Section 1: Overview des marchés mondiaux -->
+            <section class="bg-white rounded-lg shadow-md p-6 fade-in">
+                <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                    <svg class="w-6 h-6 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    Overview des Marchés Mondiaux
+                </h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="marketsGrid">
+                    <!-- Markets data will be populated here -->
+                    <div class="text-center py-8 col-span-3">
+                        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                        <p class="text-gray-500 mt-2">Chargement des données...</p>
                     </div>
                 </div>
+            </section>
 
-                <!-- Loading State -->
-                <div id="loadingState" class="hidden bg-white rounded-lg shadow-lg p-8 text-center">
-                    <i class="fas fa-spinner fa-spin text-3xl text-blue-600 mb-4"></i>
-                    <p class="text-gray-600">Chargement des données financières...</p>
+            <!-- Section 2: Matrice Secteurs STOXX / Pays -->
+            <section class="bg-white rounded-lg shadow-md p-6 fade-in">
+                <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                    <svg class="w-6 h-6 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
+                    </svg>
+                    Matrice Secteurs STOXX / Pays
+                </h2>
+                
+                <div class="overflow-x-auto">
+                    <table class="w-full border-collapse" id="matrixTable">
+                        <thead>
+                            <tr>
+                                <th class="border bg-gray-100 px-4 py-2 text-left text-sm font-semibold text-gray-700">
+                                    Secteur / Pays
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="border px-4 py-8 text-center text-gray-500" colspan="11">
+                                    <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                                    <p class="mt-2">Chargement de la matrice...</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
-
-                <!-- Results Section -->
-                <div id="resultsSection" class="hidden bg-white rounded-lg shadow-lg">
-                    <!-- Company Info -->
-                    <div class="p-6 border-b border-gray-200">
-                        <div id="companyInfo" class="flex items-center justify-between">
-                            <div>
-                                <h3 id="companyName" class="text-2xl font-bold text-gray-800"></h3>
-                                <p id="companyDetails" class="text-gray-600"></p>
-                            </div>
-                            <div class="text-right">
-                                <p class="text-sm text-gray-500">Total de jours</p>
-                                <p id="totalDays" class="text-2xl font-bold text-blue-600"></p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Price Chart -->
-                    <div class="p-6 border-b border-gray-200">
-                        <h4 class="text-lg font-semibold text-gray-800 mb-4">
-                            <i class="fas fa-chart-area mr-2"></i>
-                            Évolution des prix
-                        </h4>
-                        <div class="relative" style="height: 400px;">
-                            <canvas id="priceChart"></canvas>
-                        </div>
-                    </div>
-
-                    <!-- Data Table -->
-                    <div class="p-6">
-                        <div class="flex items-center justify-between mb-4">
-                            <h4 class="text-lg font-semibold text-gray-800">
-                                <i class="fas fa-table mr-2"></i>
-                                Données historiques
-                            </h4>
-                            <div class="flex space-x-2">
-                                <button id="exportBtn" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors">
-                                    <i class="fas fa-download mr-1"></i>
-                                    Exporter CSV
-                                </button>
-                                <select id="recordsPerPage" class="px-3 py-2 border border-gray-300 rounded">
-                                    <option value="50">50 lignes</option>
-                                    <option value="100">100 lignes</option>
-                                    <option value="250">250 lignes</option>
-                                    <option value="500">500 lignes</option>
-                                </select>
-                            </div>
-                        </div>
-                        
-                        <div class="overflow-x-auto">
-                            <table class="min-w-full table-auto border-collapse">
-                                <thead class="bg-gray-50">
-                                    <tr>
-                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border">Date</th>
-                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border">Ouverture</th>
-                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border">Plus Haut</th>
-                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border">Plus Bas</th>
-                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border">Clôture</th>
-                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border">Volume</th>
-                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border">Variation %</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="dataTableBody" class="bg-white divide-y divide-gray-200">
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <!-- Pagination -->
-                        <div id="pagination" class="flex items-center justify-between mt-6">
-                            <div class="flex items-center space-x-2">
-                                <button id="prevPage" class="px-3 py-2 border border-gray-300 rounded hover:bg-gray-50">
-                                    <i class="fas fa-chevron-left"></i>
-                                </button>
-                                <span id="pageInfo" class="text-sm text-gray-600"></span>
-                                <button id="nextPage" class="px-3 py-2 border border-gray-300 rounded hover:bg-gray-50">
-                                    <i class="fas fa-chevron-right"></i>
-                                </button>
-                            </div>
-                            <div class="text-sm text-gray-600">
-                                <span id="recordsInfo"></span>
-                            </div>
-                        </div>
+                
+                <div class="mt-4 text-sm text-gray-600">
+                    <p class="font-semibold">Légende des pays:</p>
+                    <div class="grid grid-cols-5 gap-2 mt-2">
+                        <span>🇫🇷 FR - France</span>
+                        <span>🇩🇪 DE - Allemagne</span>
+                        <span>🇬🇧 GB - Royaume-Uni</span>
+                        <span>🇮🇹 IT - Italie</span>
+                        <span>🇪🇸 ES - Espagne</span>
+                        <span>🇳🇱 NL - Pays-Bas</span>
+                        <span>🇨🇭 CH - Suisse</span>
+                        <span>🇸🇪 SE - Suède</span>
+                        <span>🇧🇪 BE - Belgique</span>
+                        <span>🇩🇰 DK - Danemark</span>
                     </div>
                 </div>
-
-                <!-- Error State -->
-                <div id="errorState" class="hidden bg-red-50 border border-red-200 rounded-lg p-6">
-                    <div class="flex items-center">
-                        <i class="fas fa-exclamation-triangle text-red-600 text-xl mr-3"></i>
-                        <div>
-                            <h3 class="text-red-800 font-semibold">Erreur</h3>
-                            <p id="errorMessage" class="text-red-700"></p>
-                        </div>
-                    </div>
-                </div>
-            </main>
-
-            <!-- Footer -->
-            <footer class="bg-white border-t border-gray-200 mt-12">
-                <div class="max-w-7xl mx-auto px-4 py-6 text-center text-gray-600">
-                    <p class="mb-2">
-                        <i class="fas fa-info-circle mr-1"></i>
-                        Données fournies par Yahoo Finance et autres sources financières
-                    </p>
-                    <p class="text-sm">
-                        Les données peuvent avoir un délai. Utilisez à titre informatif uniquement.
-                    </p>
-                </div>
-            </footer>
+            </section>
         </div>
+    </div>
 
-        <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
-        <script src="/static/app.js"></script>
-    </body>
-    </html>
+    <script src="/static/companies-data.js"></script>
+    <script src="/static/stoxx-sectors.js"></script>
+    <script>
+        // Update time
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('lastUpdate').textContent = 
+                'Dernière mise à jour: ' + now.toLocaleString('fr-FR');
+        }
+        updateTime();
+        setInterval(updateTime, 60000);
+
+        // Load markets overview
+        async function loadMarketsOverview() {
+            try {
+                const response = await fetch('/api/markets/overview');
+                const result = await response.json();
+                
+                if (result.success) {
+                    const grid = document.getElementById('marketsGrid');
+                    grid.innerHTML = result.data.map(market => {
+                        const changeColor = market.change >= 0 ? 'text-green-600' : 'text-red-600';
+                        const changeIcon = market.change >= 0 ? '↑' : '↓';
+                        const flag = getCountryFlag(market.country);
+                        
+                        return \`
+                            <div class="border rounded-lg p-4 hover:shadow-lg transition-shadow">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-lg font-semibold text-gray-800">
+                                        \${flag} \${market.index}
+                                    </span>
+                                    <span class="text-xs text-gray-500">\${market.symbol}</span>
+                                </div>
+                                <div class="text-2xl font-bold text-gray-900">
+                                    \${market.value.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </div>
+                                <div class="\${changeColor} font-medium">
+                                    \${changeIcon} \${market.change > 0 ? '+' : ''}\${market.change}%
+                                </div>
+                            </div>
+                        \`;
+                    }).join('');
+                }
+            } catch (error) {
+                console.error('Error loading markets:', error);
+            }
+        }
+
+        // Country flags mapping
+        function getCountryFlag(code) {
+            const flags = {
+                'US': '🇺🇸', 'DE': '🇩🇪', 'FR': '🇫🇷', 'GB': '🇬🇧',
+                'JP': '🇯🇵', 'HK': '🇭🇰', 'CN': '🇨🇳', 'IT': '🇮🇹',
+                'ES': '🇪🇸', 'NL': '🇳🇱', 'CH': '🇨🇭', 'SE': '🇸🇪',
+                'BE': '🇧🇪', 'DK': '🇩🇰'
+            };
+            return flags[code] || '🌍';
+        }
+
+        // Load STOXX sectors matrix
+        async function loadStoxxMatrix() {
+            try {
+                // Load company data and sectors
+                if (typeof window.COMPANIES_DATA === 'undefined' || typeof window.STOXX_SECTORS === 'undefined') {
+                    console.warn('Company data not loaded yet, using sample data');
+                    displaySampleMatrix();
+                    return;
+                }
+
+                const sectors = window.STOXX_SECTORS;
+                const companies = window.COMPANIES_DATA;
+                const countries = ['FR', 'DE', 'GB', 'IT', 'ES', 'NL', 'CH', 'SE', 'BE', 'DK'];
+                
+                // Build matrix
+                const matrix = {};
+                sectors.forEach(sector => {
+                    matrix[sector] = {};
+                    countries.forEach(country => {
+                        matrix[sector][country] = [];
+                    });
+                });
+
+                // Classify companies
+                Object.values(companies).forEach(company => {
+                    if (company.sector && company.country) {
+                        if (matrix[company.sector] && matrix[company.sector][company.country]) {
+                            matrix[company.sector][company.country].push(company);
+                        }
+                    }
+                });
+
+                // Display matrix
+                displayMatrix(sectors, countries, matrix);
+                
+            } catch (error) {
+                console.error('Error loading matrix:', error);
+                displaySampleMatrix();
+            }
+        }
+
+        function displayMatrix(sectors, countries, matrix) {
+            const table = document.getElementById('matrixTable');
+            
+            // Build header
+            let headerHtml = '<tr><th class="border bg-gray-100 px-4 py-2 text-left text-sm font-semibold text-gray-700">Secteur / Pays</th>';
+            countries.forEach(country => {
+                headerHtml += \`<th class="border bg-gray-100 px-2 py-2 text-center text-sm font-semibold text-gray-700">\${getCountryFlag(country)}<br>\${country}</th>\`;
+            });
+            headerHtml += '</tr>';
+            
+            // Build rows
+            let bodyHtml = '';
+            sectors.forEach((sector, index) => {
+                const bgColor = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                bodyHtml += \`<tr class="\${bgColor}">\`;
+                bodyHtml += \`<td class="border px-4 py-2 font-medium text-sm text-gray-700">\${sector}</td>\`;
+                
+                countries.forEach(country => {
+                    const companies = matrix[sector][country];
+                    const count = companies.length;
+                    const bgIntensity = count === 0 ? '' : count <= 2 ? 'bg-blue-50' : count <= 5 ? 'bg-blue-100' : 'bg-blue-200';
+                    
+                    bodyHtml += \`<td class="border px-2 py-2 text-xs \${bgIntensity} matrix-cell">\`;
+                    if (count > 0) {
+                        bodyHtml += \`<div class="font-semibold text-blue-800 mb-1">\${count} société\${count > 1 ? 's' : ''}</div>\`;
+                        bodyHtml += \`<div class="space-y-1">\`;
+                        companies.slice(0, 3).forEach(company => {
+                            bodyHtml += \`<div class="text-gray-600 truncate" title="\${company.name}">\${company.symbol}</div>\`;
+                        });
+                        if (count > 3) {
+                            bodyHtml += \`<div class="text-gray-400 italic">+\${count - 3} autres</div>\`;
+                        }
+                        bodyHtml += \`</div>\`;
+                    } else {
+                        bodyHtml += \`<div class="text-gray-400 text-center">-</div>\`;
+                    }
+                    bodyHtml += '</td>';
+                });
+                
+                bodyHtml += '</tr>';
+            });
+            
+            table.innerHTML = '<thead>' + headerHtml + '</thead><tbody>' + bodyHtml + '</tbody>';
+        }
+
+        function displaySampleMatrix() {
+            // Sample matrix with some example companies
+            const sectors = [
+                'Technology',
+                'Health Care', 
+                'Financials',
+                'Industrials',
+                'Consumer Goods',
+                'Consumer Services',
+                'Utilities',
+                'Telecommunications',
+                'Basic Materials',
+                'Energy'
+            ];
+            
+            const countries = ['FR', 'DE', 'GB', 'IT', 'ES', 'NL', 'CH', 'SE', 'BE', 'DK'];
+            
+            const sampleMatrix = {
+                'Technology': {
+                    'FR': [{symbol: 'CAP', name: 'Capgemini'}, {symbol: 'STM', name: 'STMicroelectronics'}],
+                    'DE': [{symbol: 'SAP', name: 'SAP'}, {symbol: 'IFX', name: 'Infineon'}],
+                    'NL': [{symbol: 'ASML', name: 'ASML'}]
+                },
+                'Health Care': {
+                    'FR': [{symbol: 'SAN', name: 'Sanofi'}],
+                    'CH': [{symbol: 'ROG', name: 'Roche'}, {symbol: 'NOVN', name: 'Novartis'}],
+                    'DK': [{symbol: 'NOVO B', name: 'Novo Nordisk'}]
+                },
+                'Financials': {
+                    'FR': [{symbol: 'BNP', name: 'BNP Paribas'}, {symbol: 'ACA', name: 'Crédit Agricole'}],
+                    'DE': [{symbol: 'DBK', name: 'Deutsche Bank'}, {symbol: 'ALV', name: 'Allianz'}],
+                    'GB': [{symbol: 'HSBA', name: 'HSBC'}, {symbol: 'BARC', name: 'Barclays'}],
+                    'ES': [{symbol: 'SAN', name: 'Santander'}, {symbol: 'BBVA', name: 'BBVA'}]
+                },
+                'Industrials': {
+                    'FR': [{symbol: 'AIR', name: 'Airbus'}, {symbol: 'SU', name: 'Schneider Electric'}],
+                    'DE': [{symbol: 'SIE', name: 'Siemens'}, {symbol: 'BMW', name: 'BMW'}],
+                    'SE': [{symbol: 'VOLV B', name: 'Volvo'}, {symbol: 'ABB', name: 'ABB'}]
+                },
+                'Consumer Goods': {
+                    'FR': [{symbol: 'MC', name: 'LVMH'}, {symbol: 'OR', name: "L'Oréal"}],
+                    'DE': [{symbol: 'ADS', name: 'Adidas'}, {symbol: 'BAS', name: 'BASF'}],
+                    'NL': [{symbol: 'UNA', name: 'Unilever'}, {symbol: 'HEIA', name: 'Heineken'}]
+                },
+                'Energy': {
+                    'FR': [{symbol: 'TTE', name: 'TotalEnergies'}],
+                    'GB': [{symbol: 'SHEL', name: 'Shell'}, {symbol: 'BP', name: 'BP'}],
+                    'ES': [{symbol: 'REP', name: 'Repsol'}],
+                    'IT': [{symbol: 'ENI', name: 'Eni'}]
+                },
+                'Telecommunications': {
+                    'FR': [{symbol: 'ORA', name: 'Orange'}],
+                    'DE': [{symbol: 'DTE', name: 'Deutsche Telekom'}],
+                    'ES': [{symbol: 'TEF', name: 'Telefónica'}],
+                    'GB': [{symbol: 'VOD', name: 'Vodafone'}]
+                },
+                'Utilities': {
+                    'FR': [{symbol: 'ENGI', name: 'Engie'}, {symbol: 'EDF', name: 'EDF'}],
+                    'DE': [{symbol: 'EOAN', name: 'E.ON'}, {symbol: 'RWE', name: 'RWE'}],
+                    'ES': [{symbol: 'IBE', name: 'Iberdrola'}],
+                    'IT': [{symbol: 'ENEL', name: 'Enel'}]
+                },
+                'Basic Materials': {},
+                'Consumer Services': {}
+            };
+
+            // Fill empty sectors
+            sectors.forEach(sector => {
+                if (!sampleMatrix[sector]) {
+                    sampleMatrix[sector] = {};
+                }
+                countries.forEach(country => {
+                    if (!sampleMatrix[sector][country]) {
+                        sampleMatrix[sector][country] = [];
+                    }
+                });
+            });
+
+            displayMatrix(sectors, countries, sampleMatrix);
+        }
+
+        // Initialize
+        loadMarketsOverview();
+        loadStoxxMatrix();
+        
+        // Refresh every 60 seconds
+        setInterval(() => {
+            loadMarketsOverview();
+        }, 60000);
+    </script>
+</body>
+</html>
   `)
 })
 

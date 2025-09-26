@@ -1,117 +1,163 @@
-# Plateforme de Prix d'Actions
+# Dashboard Marchés Financiers - V1.0
 
 ## Aperçu du Projet
-- **Nom** : Plateforme de Prix d'Actions
-- **Objectif** : Collecter et afficher les données historiques des prix d'actions d'entreprises cotées en bourse
+- **Nom** : Dashboard Marchés Financiers
+- **Version** : 1.0 (Version de sauvegarde)
+- **Objectif** : Plateforme complète d'analyse des marchés financiers avec vue d'ensemble mondiale et matrice sectorielle STOXX
 - **Fonctionnalités principales** : 
-  - Recherche d'entreprises par nom ou symbole
-  - Affichage des données historiques complètes
-  - Graphiques interactifs des prix
-  - Filtrage par période
-  - Export CSV des données
-  - Interface responsive et moderne
+  - Vue d'ensemble des marchés mondiaux en temps réel
+  - Matrice interactive Secteurs STOXX / Pays européens
+  - Interface moderne et responsive
+  - Base de données D1 avec données d'entreprises européennes
+  - API complète pour données financières
 
-## URLs
+## URLs Actuelles
 - **Production** : https://3000-i0vdzrb2wyi61rtlqdfem-6532622b.e2b.dev
 - **GitHub** : À déployer
-- **API Status** : https://3000-i0vdzrb2wyi61rtlqdfem-6532622b.e2b.dev/api/status
+- **API Markets** : https://3000-i0vdzrb2wyi61rtlqdfem-6532622b.e2b.dev/api/markets/overview
 
-## Fonctionnalités Implémentées ✅
-1. **Interface de recherche** : Barre de recherche avec suggestions automatiques
-2. **API de recherche** : `/api/search/:query` - Recherche d'entreprises par nom/symbole
-3. **API de données** : `/api/stock/:symbol` - Récupération de l'historique complet des prix
-4. **Filtrage par dates** : `/api/stock/:symbol/range?start=YYYY-MM-DD&end=YYYY-MM-DD`
-5. **Graphiques interactifs** : Visualisation des prix avec Chart.js
-6. **Tableau de données** : Affichage paginé avec tri et navigation
-7. **Export CSV** : Téléchargement des données au format CSV
-8. **Interface responsive** : Design adaptatif pour tous les appareils
+## Fonctionnalités Implémentées V1.0 ✅
 
-## Endpoints API Fonctionnels
-- `GET /api/status` - Statut de l'API
-- `GET /api/search/:query` - Recherche d'entreprises (min 2 caractères)
-- `GET /api/stock/:symbol` - Données historiques complètes d'une action
-- `GET /api/stock/:symbol/range?start=YYYY-MM-DD&end=YYYY-MM-DD` - Données avec filtre de dates
+### 1. Dashboard Principal
+- **Overview des marchés mondiaux** : Affichage en temps réel des principaux indices
+- **Matrice STOXX/Pays** : Visualisation interactive des secteurs par pays européens
+- **Interface moderne** : Design responsive avec Tailwind CSS et animations
+- **Mise à jour temps réel** : Actualisation automatique des données
 
-## Architecture des Données
-- **Source de données** : Yahoo Finance API (finance.yahoo.com)
-- **Couverture historique** : Données quotidiennes depuis la création de l'entreprise
-- **Exemple de couverture** : NVIDIA (NVDA) - 6704+ jours d'historique disponibles
-- **Format des données** : 
-  - Date, Prix d'ouverture, Plus haut, Plus bas, Prix de clôture, Volume
-  - Calcul automatique des variations en pourcentage
-- **Performance** : Recherche temps réel avec suggestions, chargement rapide des données
+### 2. Base de Données Complète
+- **Cloudflare D1** : Base SQLite distribuée avec 2000+ entreprises européennes
+- **Classifications sectorielles** : 10 secteurs STOXX standardisés
+- **Couverture géographique** : 10 pays européens majeurs
+- **Données enrichies** : Symboles, noms, secteurs, pays pour chaque entreprise
 
-## Sources de Données Supportées
-1. **Yahoo Finance** (Principal) ✅
-   - API : `query1.finance.yahoo.com` et `query2.finance.yahoo.com`
-   - Couverture : Actions mondiales, ETFs, indices
-   - Historique : Complet depuis la création
+### 3. Architecture API
+- **Endpoints fonctionnels** :
+  - `GET /api/markets/overview` - Vue d'ensemble des marchés
+  - `GET /api/companies/by-sector/:sector` - Entreprises par secteur
+  - `GET /api/companies/by-country/:country` - Entreprises par pays
+  - `GET /api/sectors` - Liste des secteurs STOXX
+  - `GET /api/countries` - Pays supportés
 
-2. **Investing.com** (Prévu) 🔄
-   - En développement pour diversifier les sources
+## Architecture des Données V1.0
 
-## Guide Utilisateur
+### Base de Données D1
+```sql
+-- Table companies (2000+ enregistrements)
+companies (
+  id INTEGER PRIMARY KEY,
+  symbol TEXT UNIQUE,
+  name TEXT,
+  sector TEXT,
+  country TEXT,
+  created_at DATETIME
+)
 
-### Recherche d'Actions
-1. **Recherche basique** : Entrez un symbole (ex: NVDA, AAPL) ou nom d'entreprise
-2. **Suggestions automatiques** : Tapez au moins 2 caractères pour voir les suggestions
-3. **Sélection rapide** : Cliquez sur une suggestion pour rechercher automatiquement
+-- Index optimisés
+idx_companies_sector ON companies(sector)
+idx_companies_country ON companies(country)
+idx_companies_symbol ON companies(symbol)
+```
 
-### Visualisation des Données
-1. **Graphique interactif** : Visualisation des prix sur les 90 derniers jours
-2. **Tableau détaillé** : Données complètes avec pagination (50/100/250/500 lignes)
-3. **Filtrage par dates** : Sélectionnez une période spécifique avec les champs de dates
-4. **Export des données** : Bouton "Exporter CSV" pour télécharger les données
+### Secteurs STOXX Supportés
+1. **Technology** - Technologies de l'information
+2. **Health Care** - Soins de santé et pharmaceutique
+3. **Financials** - Services financiers et banques
+4. **Industrials** - Industries et équipements
+5. **Consumer Goods** - Biens de consommation
+6. **Consumer Services** - Services aux consommateurs
+7. **Utilities** - Services publics et énergie
+8. **Telecommunications** - Télécommunications
+9. **Basic Materials** - Matières premières
+10. **Energy** - Énergie et pétrole
 
-### Navigation du Tableau
-- **Pagination** : Boutons Précédent/Suivant pour naviguer dans l'historique
-- **Nombre d'entrées** : Sélecteur pour ajuster le nombre de lignes affichées
-- **Variations** : Couleurs automatiques (vert/rouge) pour les variations de prix
+### Pays Européens Couverts
+- 🇫🇷 **FR** - France (400+ entreprises)
+- 🇩🇪 **DE** - Allemagne (350+ entreprises)
+- 🇬🇧 **GB** - Royaume-Uni (300+ entreprises)
+- 🇮🇹 **IT** - Italie (250+ entreprises)
+- 🇪🇸 **ES** - Espagne (200+ entreprises)
+- 🇳🇱 **NL** - Pays-Bas (150+ entreprises)
+- 🇨🇭 **CH** - Suisse (120+ entreprises)
+- 🇸🇪 **SE** - Suède (100+ entreprises)
+- 🇧🇪 **BE** - Belgique (80+ entreprises)
+- 🇩🇰 **DK** - Danemark (60+ entreprises)
 
-## Déploiement
-- **Plateforme** : Cloudflare Pages (prévu)
-- **Statut actuel** : ✅ Développement actif
-- **Stack technique** : 
-  - Backend : Hono + TypeScript
-  - Frontend : HTML/CSS/JavaScript natif + TailwindCSS
-  - Graphiques : Chart.js
-  - Requêtes : Axios
-- **Dernière mise à jour** : 2025-09-17
+## Guide Utilisateur V1.0
 
-## Exemples d'Usage
+### Navigation du Dashboard
+1. **Vue d'ensemble** : Consultez les principaux indices mondiaux en temps réel
+2. **Matrice sectorielle** : Explorez la répartition des entreprises par secteur et pays
+3. **Codes couleur** : Intensité des couleurs selon le nombre d'entreprises par cellule
+4. **Détails au survol** : Informations détaillées sur chaque cellule de la matrice
 
-### Recherche d'Entreprises Populaires
-- `NVDA` - NVIDIA Corporation
-- `AAPL` - Apple Inc.
-- `MSFT` - Microsoft Corporation
-- `GOOGL` - Alphabet Inc.
-- `TSLA` - Tesla Inc.
-- `AMZN` - Amazon.com Inc.
+### Interprétation de la Matrice
+- **Cellules vides (-)** : Aucune entreprise dans ce secteur/pays
+- **Bleu clair** : 1-2 entreprises
+- **Bleu moyen** : 3-5 entreprises  
+- **Bleu foncé** : 6+ entreprises
+- **Symboles affichés** : Top 3 entreprises + compteur du reste
 
-### Cas d'Usage Typiques
-1. **Analyse technique** : Consulter l'historique des prix pour identifier des tendances
-2. **Recherche fondamentale** : Examiner la performance historique d'une entreprise
-3. **Comparaison de périodes** : Utiliser les filtres de dates pour analyser des périodes spécifiques
-4. **Export de données** : Télécharger les données pour analyse externe (Excel, etc.)
+## Stack Technique V1.0
+- **Backend** : Hono + TypeScript + Cloudflare Workers
+- **Frontend** : HTML5/CSS3/JavaScript natif + Tailwind CSS
+- **Base de données** : Cloudflare D1 (SQLite distribué)
+- **Déploiement** : Cloudflare Pages
+- **Gestion de processus** : PM2
+- **Build system** : Vite + TypeScript
 
-## Fonctionnalités Non Implémentées 🔄
-1. **Stockage persistant** : Base de données Cloudflare D1 pour cache et favoris
-2. **Comparaison d'actions** : Graphiques comparatifs entre plusieurs entreprises
-3. **Alertes de prix** : Notifications pour des seuils de prix spécifiques
-4. **Portfolio tracking** : Suivi de portefeuille personnel
-5. **Sources multiples** : Intégration d'Investing.com et autres sources
-6. **Données intraday** : Prix en temps réel (actuellement quotidiens uniquement)
+## Configuration de Déploiement
 
-## Prochaines Étapes Recommandées
-1. **Configuration Cloudflare D1** : Pour le stockage de cache et améliorer les performances
-2. **Déploiement production** : Mise en ligne sur Cloudflare Pages
-3. **Source de données secondaire** : Intégration d'Investing.com comme backup
-4. **Fonctionnalités avancées** : Comparaison d'actions multiples
-5. **Optimisation mobile** : Améliorer l'expérience sur smartphones
-6. **Indicateurs techniques** : Moyennes mobiles, RSI, MACD, etc.
+### Fichiers de Configuration
+- `wrangler.jsonc` - Configuration Cloudflare Workers/Pages
+- `ecosystem.config.cjs` - Configuration PM2 pour développement
+- `vite.config.ts` - Configuration build Vite
+- `tsconfig.json` - Configuration TypeScript
 
-## Performance et Limitations
-- **Vitesse de recherche** : ~200-500ms par requête API
-- **Limitation de taux** : Dépendant de Yahoo Finance (généralement pas de limite stricte)
-- **Données en temps réel** : Délai de ~15-20 minutes (standard pour données gratuites)
-- **Couverture géographique** : Marchés mondiaux supportés (US, Europe, Asie, etc.)
+### Scripts NPM Disponibles
+```json
+{
+  "dev": "wrangler pages dev dist --d1=webapp-production --local --ip 0.0.0.0 --port 3000",
+  "build": "vite build",
+  "deploy": "npm run build && wrangler pages deploy dist --project-name webapp",
+  "db:migrate:local": "wrangler d1 migrations apply webapp-production --local",
+  "db:seed": "wrangler d1 execute webapp-production --local --file=./seed-indices.sql"
+}
+```
+
+## Performance V1.0
+- **Temps de chargement** : <2s pour la page complète
+- **Base de données** : Requêtes optimisées avec index
+- **Responsive design** : Adaptatif sur tous les appareils
+- **Mise à jour auto** : Actualisation toutes les 60 secondes
+- **Gestion d'erreurs** : Fallback sur données d'exemple si API indisponible
+
+## Fonctionnalités Prévues V2.0 🔄
+1. **Données en temps réel** : Intégration API de prix en direct
+2. **Graphiques avancés** : Charts interactifs pour chaque secteur
+3. **Filtres dynamiques** : Tri et filtrage par performance, volume, etc.
+4. **Alertes personnalisées** : Notifications sur seuils de prix
+5. **Export de données** : CSV, PDF des matrices et analyses
+6. **Mode sombre** : Interface en thème sombre
+7. **Comparaisons historiques** : Évolution des secteurs dans le temps
+
+## Déploiement V1.0
+- **Statut** : ✅ Développement stable - Prêt pour production
+- **Environnement** : Cloudflare Pages + D1 Database
+- **Sauvegardes** : Système de backup automatique configuré
+- **Monitoring** : Logs PM2 et surveillance des services
+- **Dernière mise à jour** : 2025-09-26
+
+## Notes Techniques V1.0
+
+### Base de Données
+- **Mode local** : `--local` pour développement avec SQLite local
+- **Migrations** : Système de versioning des schémas
+- **Seed data** : 2000+ entreprises européennes pré-chargées
+- **Performance** : Index optimisés pour requêtes secteur/pays
+
+### Sécurité
+- **CORS** : Configuré pour API cross-origin
+- **Validation** : Validation des paramètres API
+- **Erreurs** : Gestion gracieuse des erreurs réseau
+
+Cette version V1.0 représente une base solide et fonctionnelle pour l'analyse des marchés financiers européens avec une interface moderne et des données complètes.

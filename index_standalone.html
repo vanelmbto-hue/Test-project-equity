@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Amindis Equity Oracle</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .positive { color: #10b981; }
+        .negative { color: #ef4444; }
+        .neutral { color: #6b7280; }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 min-h-screen text-white">
+    <div class="container mx-auto p-6">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-5xl font-bold mb-3 bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
+                Amindis Equity Oracle
+            </h1>
+            <p class="text-gray-300 text-lg">Analyse en Temps Réel des Marchés Financiers Mondiaux</p>
+        </div>
+
+        <!-- Main Content -->
+        <div id="app" class="space-y-6">
+            <!-- Indices Table -->
+            <div class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 shadow-2xl">
+                <h2 class="text-2xl font-semibold mb-4 text-cyan-300">Indices Boursiers Mondiaux</h2>
+                <div id="indices-table-container">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="border-b border-gray-700">
+                                    <th class="px-4 py-3 text-left">Indice</th>
+                                    <th class="px-4 py-3 text-right">Prix</th>
+                                    <th class="px-4 py-3 text-right">Variation (%)</th>
+                                    <th class="px-4 py-3 text-right">Volatilité</th>
+                                    <th class="px-4 py-3 text-right">YTD (%)</th>
+                                    <th class="px-4 py-3 text-right">5 Ans (%)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="indices-tbody">
+                                <tr>
+                                    <td colspan="6" class="text-center py-8">
+                                        <div class="loading-spinner mx-auto"></div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Charts Container -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 shadow-2xl">
+                    <h3 class="text-xl font-semibold mb-4 text-cyan-300">Performance Comparative</h3>
+                    <canvas id="performanceChart"></canvas>
+                </div>
+                
+                <div class="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 shadow-2xl">
+                    <h3 class="text-xl font-semibold mb-4 text-cyan-300">Rendements Rolling 3 Ans</h3>
+                    <canvas id="rollingReturnsChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center mt-8 text-gray-400 text-sm">
+            <p>Dernière mise à jour : <span id="lastUpdate"></span></p>
+        </div>
+    </div>
+
+    <script>
+        // Main application code
+        (function() {
+            const INDICES = [
+                { symbol: '^GSPC', name: 'S&P 500', country: 'US' },
+                { symbol: '^DJI', name: 'Dow Jones', country: 'US' },
+                { symbol: '^IXIC', name: 'NASDAQ', country: 'US' },
+                { symbol: '^GDAXI', name: 'DAX', country: 'DE' },
+                { symbol: '^FCHI', name: 'CAC 40', country: 'FR' },
+                { symbol: '^FTSE', name: 'FTSE 100', country: 'GB' },
+                { symbol: '^N225', name: 'Nikkei 225', country: 'JP' },
+                { symbol: '^HSI', name: 'Hang Seng', country: 'HK' },
+                { symbol: '^SSEC', name: 'Shanghai', country: 'CN' },
+                { symbol: '^BSESN', name: 'BSE Sensex', country: 'IN' },
+                { symbol: '^BVSP', name: 'Bovespa', country: 'BR' },
+                { symbol: '^GSPTSE', name: 'S&P/TSX', country: 'CA' }
+            ];
+
+            // Simulated data
+            const simulatedData = {
+                '^GSPC': { price: 5498.42, change: 1.2, volatility: 15.8, ytd: 18.5, fiveYear: 85.2 },
+                '^DJI': { price: 42250.75, change: 0.8, volatility: 14.2, ytd: 12.3, fiveYear: 72.1 },
+                '^IXIC': { price: 17254.82, change: 1.5, volatility: 18.5, ytd: 22.1, fiveYear: 95.6 },
+                '^GDAXI': { price: 19425.60, change: 0.6, volatility: 16.2, ytd: 15.6, fiveYear: 62.3 },
+                '^FCHI': { price: 7625.75, change: 0.3, volatility: 15.1, ytd: 5.7, fiveYear: 42.8 },
+                '^FTSE': { price: 8285.52, change: -0.2, volatility: 12.8, ytd: 2.8, fiveYear: 25.6 },
+                '^N225': { price: 38925.63, change: 1.8, volatility: 19.2, ytd: 28.5, fiveYear: 112.3 },
+                '^HSI': { price: 17985.20, change: -0.5, volatility: 22.5, ytd: -3.2, fiveYear: -15.8 },
+                '^SSEC': { price: 2895.42, change: -0.8, volatility: 20.8, ytd: -5.8, fiveYear: 8.2 },
+                '^BSESN': { price: 82365.77, change: 0.9, volatility: 17.5, ytd: 8.9, fiveYear: 95.2 },
+                '^BVSP': { price: 128542.00, change: -0.3, volatility: 24.2, ytd: -2.1, fiveYear: 35.6 },
+                '^GSPTSE': { price: 23850.42, change: 0.5, volatility: 13.5, ytd: 14.2, fiveYear: 58.7 }
+            };
+
+            // Format number with commas
+            function formatNumber(num, decimals = 2) {
+                if (num === null || num === undefined) return 'N/A';
+                return new Intl.NumberFormat('fr-FR', {
+                    minimumFractionDigits: decimals,
+                    maximumFractionDigits: decimals
+                }).format(num);
+            }
+
+            // Get color class based on value
+            function getColorClass(value) {
+                if (value > 0) return 'positive';
+                if (value < 0) return 'negative';
+                return 'neutral';
+            }
+
+            // Update table
+            function updateTable() {
+                const tbody = document.getElementById('indices-tbody');
+                let html = '';
+
+                INDICES.forEach(index => {
+                    const data = simulatedData[index.symbol];
+                    if (data) {
+                        html += `
+                            <tr class="border-b border-gray-700/50 hover:bg-gray-700/30 transition-colors">
+                                <td class="px-4 py-3 font-medium">
+                                    <span class="flag-icon flag-icon-${index.country.toLowerCase()} mr-2"></span>
+                                    ${index.name}
+                                </td>
+                                <td class="px-4 py-3 text-right">${formatNumber(data.price)}</td>
+                                <td class="px-4 py-3 text-right ${getColorClass(data.change)}">
+                                    ${data.change > 0 ? '+' : ''}${formatNumber(data.change)}%
+                                </td>
+                                <td class="px-4 py-3 text-right">${formatNumber(data.volatility)}%</td>
+                                <td class="px-4 py-3 text-right ${getColorClass(data.ytd)}">
+                                    ${data.ytd > 0 ? '+' : ''}${formatNumber(data.ytd)}%
+                                </td>
+                                <td class="px-4 py-3 text-right ${getColorClass(data.fiveYear)}">
+                                    ${data.fiveYear > 0 ? '+' : ''}${formatNumber(data.fiveYear)}%
+                                </td>
+                            </tr>
+                        `;
+                    }
+                });
+
+                tbody.innerHTML = html;
+            }
+
+            // Create performance chart
+            function createPerformanceChart() {
+                const ctx = document.getElementById('performanceChart').getContext('2d');
+                
+                const labels = ['YTD', '1 An', '3 Ans', '5 Ans'];
+                const datasets = [
+                    {
+                        label: 'S&P 500',
+                        data: [18.5, 28.2, 45.6, 85.2],
+                        borderColor: 'rgb(59, 130, 246)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderWidth: 2
+                    },
+                    {
+                        label: 'DAX',
+                        data: [15.6, 22.4, 38.5, 62.3],
+                        borderColor: 'rgb(239, 68, 68)',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        borderWidth: 2
+                    },
+                    {
+                        label: 'CAC 40',
+                        data: [5.7, 12.8, 25.6, 42.8],
+                        borderColor: 'rgb(34, 197, 94)',
+                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                        borderWidth: 2
+                    },
+                    {
+                        label: 'FTSE 100',
+                        data: [2.8, 8.5, 15.2, 25.6],
+                        borderColor: 'rgb(251, 146, 60)',
+                        backgroundColor: 'rgba(251, 146, 60, 0.1)',
+                        borderWidth: 2
+                    },
+                    {
+                        label: 'Nikkei 225',
+                        data: [28.5, 42.1, 78.5, 112.3],
+                        borderColor: 'rgb(168, 85, 247)',
+                        backgroundColor: 'rgba(168, 85, 247, 0.1)',
+                        borderWidth: 2
+                    }
+                ];
+
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: datasets
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                                labels: {
+                                    color: '#fff',
+                                    padding: 15
+                                }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.dataset.label + ': ' + context.parsed.y.toFixed(1) + '%';
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: {
+                                    color: 'rgba(255, 255, 255, 0.1)'
+                                },
+                                ticks: {
+                                    color: '#fff',
+                                    callback: function(value) {
+                                        return value + '%';
+                                    }
+                                }
+                            },
+                            x: {
+                                grid: {
+                                    color: 'rgba(255, 255, 255, 0.1)'
+                                },
+                                ticks: {
+                                    color: '#fff'
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Create rolling returns chart
+            function createRollingReturnsChart() {
+                const ctx = document.getElementById('rollingReturnsChart').getContext('2d');
+                
+                const data = {
+                    labels: ['S&P 500', 'DAX', 'CAC 40', 'FTSE 100', 'Nikkei 225'],
+                    datasets: [{
+                        label: 'Rendement Rolling 3 Ans (%)',
+                        data: [45.6, 38.5, 25.6, 15.2, 78.5],
+                        backgroundColor: [
+                            'rgba(59, 130, 246, 0.8)',
+                            'rgba(239, 68, 68, 0.8)',
+                            'rgba(34, 197, 94, 0.8)',
+                            'rgba(251, 146, 60, 0.8)',
+                            'rgba(168, 85, 247, 0.8)'
+                        ],
+                        borderColor: [
+                            'rgb(59, 130, 246)',
+                            'rgb(239, 68, 68)',
+                            'rgb(34, 197, 94)',
+                            'rgb(251, 146, 60)',
+                            'rgb(168, 85, 247)'
+                        ],
+                        borderWidth: 2
+                    }]
+                };
+
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: data,
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.parsed.y.toFixed(1) + '%';
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: {
+                                    color: 'rgba(255, 255, 255, 0.1)'
+                                },
+                                ticks: {
+                                    color: '#fff',
+                                    callback: function(value) {
+                                        return value + '%';
+                                    }
+                                }
+                            },
+                            x: {
+                                grid: {
+                                    display: false
+                                },
+                                ticks: {
+                                    color: '#fff'
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Initialize app
+            function initializeApp() {
+                // Update last update time
+                document.getElementById('lastUpdate').textContent = new Date().toLocaleString('fr-FR');
+                
+                // Load data
+                updateTable();
+                
+                // Create charts
+                createPerformanceChart();
+                createRollingReturnsChart();
+                
+                // Refresh every 60 seconds
+                setInterval(() => {
+                    updateTable();
+                    document.getElementById('lastUpdate').textContent = new Date().toLocaleString('fr-FR');
+                }, 60000);
+            }
+
+            // Start app when DOM is loaded
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initializeApp);
+            } else {
+                initializeApp();
+            }
+        })();
+    </script>
+</body>
+</html>
