@@ -316,14 +316,22 @@ async function fetchYahooCompanyInfo(symbol: string) {
 function normalizeSymbol(symbol: string): string {
   // Convert common alternative names to Yahoo Finance symbols
   const symbolMap: Record<string, string> = {
+    'CAP': 'CAP.PA',        // Capgemini short form → full Euronext Paris symbol
     'CAPGEMINI': 'CAP.PA',  // Capgemini on Euronext Paris
+    'MC': 'MC.PA',         // LVMH short form → full Euronext Paris symbol
     'LVMH': 'MC.PA',       // LVMH on Euronext Paris
+    'OR': 'OR.PA',         // L'Oréal short form → full Euronext Paris symbol
     'LOREAL': 'OR.PA',     // L'Oréal on Euronext Paris
+    'SAN': 'SAN.PA',       // Sanofi short form → full Euronext Paris symbol
     'SANOFI': 'SAN.PA',    // Sanofi on Euronext Paris
+    'AIR': 'AIR.PA',       // Airbus short form → full Euronext Paris symbol
     'AIRBUS': 'AIR.PA',    // Airbus on Euronext Paris
     'BNP': 'BNP.PA',       // BNP Paribas on Euronext Paris
+    'UG': 'UG.PA',         // Peugeot short form → full Euronext Paris symbol
     'PEUGEOT': 'UG.PA',    // Peugeot on Euronext Paris
+    'KER': 'KER.PA',       // Kering short form → full Euronext Paris symbol
     'KERING': 'KER.PA',    // Kering on Euronext Paris
+    'TTE': 'TTE',          // TotalEnergies (already correct)
     'TOTALENERGIES': 'TTE' // TotalEnergies
   }
   
