@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { serveStatic } from 'hono/cloudflare-workers'
+import { getAnalystPageHTML } from './analyst-page'
 
 const app = new Hono()
 
@@ -41,6 +42,53 @@ app.get('/api/markets/overview', async (c) => {
   return c.json({ success: true, data: markets })
 })
 
+// API for stock historical data
+app.get('/api/stock/:symbol/historical', async (c) => {
+  const symbol = c.req.param('symbol')
+  const startDate = c.req.query('start') || '2023-01-01'
+  const endDate = c.req.query('end') || new Date().toISOString().split('T')[0]
+  
+  try {
+    // In production, this would call Yahoo Finance or Investing.com API
+    // For now, return sample data
+    const sampleData = generateSampleHistoricalData(symbol, startDate, endDate)
+    
+    return c.json({ 
+      success: true, 
+      symbol: symbol.toUpperCase(),
+      startDate,
+      endDate,
+      data: sampleData,
+      count: sampleData.length
+    })
+  } catch (error) {
+    return c.json({ success: false, error: 'Failed to fetch historical data' }, 500)
+  }
+})
+
+// API for company info
+app.get('/api/stock/:symbol/info', async (c) => {
+  const symbol = c.req.param('symbol')
+  
+  try {
+    // Sample company info - in production would fetch from API
+    const companyInfo = {
+      symbol: symbol.toUpperCase(),
+      name: `${symbol.toUpperCase()} Corporation`,
+      sector: 'Technology',
+      country: 'US',
+      currency: 'USD',
+      marketCap: 2500000000000,
+      employees: 150000,
+      description: `${symbol.toUpperCase()} is a leading technology company.`
+    }
+    
+    return c.json({ success: true, data: companyInfo })
+  } catch (error) {
+    return c.json({ success: false, error: 'Failed to fetch company info' }, 500)
+  }
+})
+
 // STOXX Sectors Matrix API
 app.get('/api/matrix/stoxx-sectors', async (c) => {
   // This would be populated with real company data
@@ -64,10 +112,55 @@ app.get('/api/matrix/stoxx-sectors', async (c) => {
   return c.json({ success: true, data: matrix })
 })
 
-// Main HTML page
+// Helper function to generate sample historical data
+function generateSampleHistoricalData(symbol: string, startDate: string, endDate: string) {
+  const data = []
+  const start = new Date(startDate)
+  const end = new Date(endDate)
+  let currentPrice = 100 + Math.random() * 500 // Random starting price
+  
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    if (d.getDay() !== 0 && d.getDay() !== 6) { // Skip weekends
+      const dailyChange = (Math.random() - 0.5) * 0.05 // ±2.5% daily change
+      const open = currentPrice
+      const change = open * dailyChange
+      const close = open + change
+      const high = Math.max(open, close) * (1 + Math.random() * 0.02)
+      const low = Math.min(open, close) * (1 - Math.random() * 0.02)
+      const volume = Math.floor(Math.random() * 10000000) + 1000000
+      
+      data.push({
+        date: d.toISOString().split('T')[0],
+        open: parseFloat(open.toFixed(2)),
+        high: parseFloat(high.toFixed(2)),
+        low: parseFloat(low.toFixed(2)),
+        close: parseFloat(close.toFixed(2)),
+        volume: volume,
+        change: parseFloat(change.toFixed(2)),
+        changePercent: parseFloat((dailyChange * 100).toFixed(2))
+      })
+      
+      currentPrice = close
+    }
+  }
+  
+  return data.reverse() // Most recent first
+}
+
+// Analyst page route
+app.get('/analyst', (c) => {
+  const symbol = c.req.query('symbol') || 'AAPL'
+  return c.html(getAnalystPageHTML(symbol))
+})
+
+// Homepage route
 app.get('/', (c) => {
-  return c.html(`
-<!DOCTYPE html>
+  return c.html(getHomepageHTML())
+})
+
+// Function to get homepage HTML
+function getHomepageHTML() {
+  return `<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -84,34 +177,20 @@ app.get('/', (c) => {
             overflow-y: auto;
             scrollbar-width: thin;
         }
-        .matrix-cell::-webkit-scrollbar {
-            width: 4px;
-        }
-        .matrix-cell::-webkit-scrollbar-track {
-            background: #f1f1f1;
-        }
-        .matrix-cell::-webkit-scrollbar-thumb {
-            background: #888;
-            border-radius: 4px;
-        }
-        .flag-icon {
-            width: 20px;
-            height: 15px;
-            display: inline-block;
-            margin-right: 4px;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .fade-in {
-            animation: fadeIn 0.5s ease-out;
-        }
+        .matrix-cell::-webkit-scrollbar { width: 4px; }
+        .matrix-cell::-webkit-scrollbar-track { background: #f1f1f1; }
+        .matrix-cell::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
+        .flag-icon { width: 20px; height: 15px; display: inline-block; margin-right: 4px; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-in { animation: fadeIn 0.5s ease-out; }
+        .nav-active { background-color: #3B82F6; color: white; }
+        .company-link { cursor: pointer; transition: all 0.2s; }
+        .company-link:hover { background-color: #EBF8FF; color: #1D4ED8; }
     </style>
 </head>
 <body class="bg-gray-50">
     <div class="min-h-screen">
-        <!-- Header -->
+        <!-- Header with Navigation -->
         <header class="bg-white shadow-sm border-b">
             <div class="max-w-7xl mx-auto px-4 py-4">
                 <div class="flex items-center justify-between">
@@ -121,8 +200,27 @@ app.get('/', (c) => {
                         </svg>
                         <h1 class="text-2xl font-bold text-gray-800">Dashboard Marchés Financiers</h1>
                     </div>
-                    <div class="text-sm text-gray-500">
-                        <span id="lastUpdate"></span>
+                    
+                    <!-- Navigation Buttons -->
+                    <div class="flex items-center space-x-4">
+                        <nav class="flex space-x-1 bg-gray-100 rounded-lg p-1">
+                            <a href="/" class="px-4 py-2 rounded-md text-sm font-medium transition-colors bg-blue-600 text-white">
+                                <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"></path>
+                                </svg>
+                                Overview
+                            </a>
+                            <a href="/analyst" class="px-4 py-2 rounded-md text-sm font-medium transition-colors text-gray-600 hover:text-gray-800 hover:bg-gray-200">
+                                <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                                </svg>
+                                Analyst
+                            </a>
+                        </nav>
+                        
+                        <div class="text-sm text-gray-500">
+                            <span id="lastUpdate"></span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -220,22 +318,20 @@ app.get('/', (c) => {
                         const changeIcon = market.change >= 0 ? '↑' : '↓';
                         const flag = getCountryFlag(market.country);
                         
-                        return \`
-                            <div class="border rounded-lg p-4 hover:shadow-lg transition-shadow">
-                                <div class="flex items-center justify-between mb-2">
-                                    <span class="text-lg font-semibold text-gray-800">
-                                        \${flag} \${market.index}
-                                    </span>
-                                    <span class="text-xs text-gray-500">\${market.symbol}</span>
-                                </div>
-                                <div class="text-2xl font-bold text-gray-900">
-                                    \${market.value.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </div>
-                                <div class="\${changeColor} font-medium">
-                                    \${changeIcon} \${market.change > 0 ? '+' : ''}\${market.change}%
-                                </div>
-                            </div>
-                        \`;
+                        return '<div class="border rounded-lg p-4 hover:shadow-lg transition-shadow">' +
+                            '<div class="flex items-center justify-between mb-2">' +
+                                '<span class="text-lg font-semibold text-gray-800">' +
+                                    flag + ' ' + market.index +
+                                '</span>' +
+                                '<span class="text-xs text-gray-500">' + market.symbol + '</span>' +
+                            '</div>' +
+                            '<div class="text-2xl font-bold text-gray-900">' +
+                                market.value.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) +
+                            '</div>' +
+                            '<div class="' + changeColor + ' font-medium">' +
+                                changeIcon + ' ' + (market.change > 0 ? '+' : '') + market.change + '%' +
+                            '</div>' +
+                        '</div>';
                     }).join('');
                 }
             } catch (error) {
@@ -301,7 +397,7 @@ app.get('/', (c) => {
             // Build header
             let headerHtml = '<tr><th class="border bg-gray-100 px-4 py-2 text-left text-sm font-semibold text-gray-700">Secteur / Pays</th>';
             countries.forEach(country => {
-                headerHtml += \`<th class="border bg-gray-100 px-2 py-2 text-center text-sm font-semibold text-gray-700">\${getCountryFlag(country)}<br>\${country}</th>\`;
+                headerHtml += '<th class="border bg-gray-100 px-2 py-2 text-center text-sm font-semibold text-gray-700">' + getCountryFlag(country) + '<br>' + country + '</th>';
             });
             headerHtml += '</tr>';
             
@@ -309,27 +405,27 @@ app.get('/', (c) => {
             let bodyHtml = '';
             sectors.forEach((sector, index) => {
                 const bgColor = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
-                bodyHtml += \`<tr class="\${bgColor}">\`;
-                bodyHtml += \`<td class="border px-4 py-2 font-medium text-sm text-gray-700">\${sector}</td>\`;
+                bodyHtml += '<tr class="' + bgColor + '">';
+                bodyHtml += '<td class="border px-4 py-2 font-medium text-sm text-gray-700">' + sector + '</td>';
                 
                 countries.forEach(country => {
                     const companies = matrix[sector][country];
                     const count = companies.length;
                     const bgIntensity = count === 0 ? '' : count <= 2 ? 'bg-blue-50' : count <= 5 ? 'bg-blue-100' : 'bg-blue-200';
                     
-                    bodyHtml += \`<td class="border px-2 py-2 text-xs \${bgIntensity} matrix-cell">\`;
+                    bodyHtml += '<td class="border px-2 py-2 text-xs ' + bgIntensity + ' matrix-cell">';
                     if (count > 0) {
-                        bodyHtml += \`<div class="font-semibold text-blue-800 mb-1">\${count} société\${count > 1 ? 's' : ''}</div>\`;
-                        bodyHtml += \`<div class="space-y-1">\`;
+                        bodyHtml += '<div class="font-semibold text-blue-800 mb-1">' + count + ' société' + (count > 1 ? 's' : '') + '</div>';
+                        bodyHtml += '<div class="space-y-1">';
                         companies.slice(0, 3).forEach(company => {
-                            bodyHtml += \`<div class="text-gray-600 truncate" title="\${company.name}">\${company.symbol}</div>\`;
+                            bodyHtml += '<div class="text-gray-600 truncate company-link" title="' + company.name + '" onclick="goToAnalyst(' + "'" + company.symbol + "'" + ')">' + company.symbol + '</div>';
                         });
                         if (count > 3) {
-                            bodyHtml += \`<div class="text-gray-400 italic">+\${count - 3} autres</div>\`;
+                            bodyHtml += '<div class="text-gray-400 italic">+' + (count - 3) + ' autres</div>';
                         }
-                        bodyHtml += \`</div>\`;
+                        bodyHtml += '</div>';
                     } else {
-                        bodyHtml += \`<div class="text-gray-400 text-center">-</div>\`;
+                        bodyHtml += '<div class="text-gray-400 text-center">-</div>';
                     }
                     bodyHtml += '</td>';
                 });
@@ -421,6 +517,11 @@ app.get('/', (c) => {
             displayMatrix(sectors, countries, sampleMatrix);
         }
 
+        // Navigate to analyst page
+        function goToAnalyst(symbol) {
+            window.location.href = '/analyst?symbol=' + symbol;
+        }
+
         // Initialize
         loadMarketsOverview();
         loadStoxxMatrix();
@@ -431,8 +532,7 @@ app.get('/', (c) => {
         }, 60000);
     </script>
 </body>
-</html>
-  `)
-})
+</html>`
+}
 
 export default app
